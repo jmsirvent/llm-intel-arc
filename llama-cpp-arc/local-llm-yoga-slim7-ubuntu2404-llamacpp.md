@@ -1,52 +1,52 @@
 # Local LLM Inference — Yoga Slim 7 14ILL10 (llama.cpp SYCL)
 **Ubuntu 24.04 LTS · Intel Core Ultra 7 258V · Intel Arc 140V (Xe2) · 32 GB LPDDR5X**
 
-> **Documento en evolución.** Las secciones validadas en hardware real están marcadas con ✅.
-> Las marcadas con ⚠️ están documentadas pero pendientes de prueba — pueden requerir ajustes.
+> **Living document.** Sections validated on real hardware are marked ✅.
+> Sections marked ⚠️ are documented but pending testing — they may require adjustments.
 
 ---
 
-## Índice
+## Table of contents
 
-1. [Resumen de hardware y arquitectura de solución](#1-resumen-de-hardware-y-arquitectura-de-solución)
-2. [Prerequisitos del sistema](#2-prerequisitos-del-sistema)
+1. [Hardware summary and solution architecture](#1-hardware-summary-and-solution-architecture)
+2. [System prerequisites](#2-system-prerequisites)
 3. [Intel GPU Compute Runtime (Level Zero — host-side)](#3-intel-gpu-compute-runtime-level-zero--host-side)
-4. [oneAPI — compilador SYCL e Intel MKL](#4-oneapi--compilador-sycl-e-intel-mkl)
-5. [Compilación de llama.cpp con backend SYCL](#5-compilación-de-llamacpp-con-backend-sycl)
-6. [llama-server — configuración y arranque](#6-llama-server--configuración-y-arranque)
-7. [Modelos recomendados](#7-modelos-recomendados)
-8. [Gestión de modelos y benchmarking](#8-gestión-de-modelos-y-benchmarking)
-9. [Integración con herramientas externas](#9-integración-con-herramientas-externas)
-10. [Systemd service (autoarranque)](#10-systemd-service-autoarranque)
-11. [Tuning de SO para rendimiento](#11-tuning-de-so-para-rendimiento)
+4. [oneAPI — SYCL compiler and Intel MKL](#4-oneapi--sycl-compiler-and-intel-mkl)
+5. [Building llama.cpp with SYCL backend](#5-building-llamacpp-with-sycl-backend)
+6. [llama-server — configuration and startup](#6-llama-server--configuration-and-startup)
+7. [Recommended models](#7-recommended-models)
+8. [Model management and benchmarking](#8-model-management-and-benchmarking)
+9. [Integration with external tools](#9-integration-with-external-tools)
+10. [Systemd service (autostart)](#10-systemd-service-autostart)
+11. [OS tuning for performance](#11-os-tuning-for-performance)
 12. [Troubleshooting](#12-troubleshooting)
 
 ---
 
-## 1. Resumen de hardware y arquitectura de solución
+## 1. Hardware summary and solution architecture
 
-| Componente | Detalle |
+| Component | Detail |
 |---|---|
 | CPU | Intel Core Ultra 7 258V (Lunar Lake, 8 cores @ 4.7 GHz) |
 | GPU | Intel Arc 140V (Xe2 iGPU, 8 Xe2 cores, driver: `xe`) |
 | NPU | Intel AI Boost / Lunar Lake NPU (`intel_vpu`) |
-| RAM | 32 GB LPDDR5X-8533 unificada (shared CPU/GPU/NPU, ~97 GB/s) |
+| RAM | 32 GB LPDDR5X-8533 unified (shared CPU/GPU/NPU, ~97 GB/s) |
 | Storage | Samsung NVMe PM9C1b 1 TB |
 | OS | Ubuntu 24.04 LTS, kernel 6.19.10 |
 
-### Por qué llama.cpp SYCL nativo
+### Why native SYCL llama.cpp
 
-El stack anterior (`../ipex-llm/`) usaba IPEX-LLM, un fork de Ollama parchado por Intel para SYCL/Level Zero. Ese proyecto fue archivado en enero 2026. llama.cpp es el motor de inferencia subyacente real — IPEX-LLM lo envolvía en Docker para distribuir el toolchain de Intel precompilado.
+The previous stack (`../ipex-llm/`) used IPEX-LLM, an Intel-patched fork of Ollama for SYCL/Level Zero. That project was archived in January 2026. llama.cpp is the actual underlying inference engine — IPEX-LLM wrapped it in Docker to distribute the precompiled Intel toolchain.
 
-Este stack compila llama.cpp directamente con el compilador Intel `icx/icpx` (oneAPI), sin intermediarios Docker. Lo que se gana:
+This stack compiles llama.cpp directly with the Intel `icx/icpx` compiler (oneAPI), no Docker intermediary. What you gain:
 
-- Speculative decoding (draft model) — +50–150 % potencial en generación
-- IQ quantizations (IQ4\_XS, IQ3\_M) — mejor calidad/GB que K\_M
-- Soporte de modelos nuevos al día con upstream llama.cpp
-- API OpenAI-compatible en `localhost:8080` — mismos clientes que con Ollama, solo cambia el puerto
+- Speculative decoding (draft model) — potential +50–150% on generation throughput
+- IQ quantizations (IQ4\_XS, IQ3\_M) — better quality per GB than K\_M
+- Up-to-date model support with llama.cpp upstream
+- OpenAI-compatible API at `localhost:8080` — same clients as Ollama, only the port changes
 
 ```
-VS Code (Twinny / Cline / Roo Code) · Open WebUI · Scripts Python
+VS Code (Twinny / Cline / Roo Code) · Open WebUI · Python scripts
                      │
                      │  OpenAI-compatible REST  (localhost:8080)
                      ▼
@@ -56,39 +56,39 @@ VS Code (Twinny / Cline / Roo Code) · Open WebUI · Scripts Python
                      ▼
           Intel Arc 140V  (Xe2, driver xe)
           ──────────────────────────────────
-          LPDDR5X-8533  ·  32 GB  unificada
+          LPDDR5X-8533  ·  32 GB  unified memory
 ```
 
 ---
 
-## 2. Prerequisitos del sistema ✅
+## 2. System prerequisites ✅
 
-### 2.1 Verificar que el GPU está activo con driver xe
+### 2.1 Verify the GPU is active with the xe driver
 
 ```bash
-# Driver xe activo para el iGPU (NO i915 — Xe2 usa driver diferente)
+# xe driver active for the iGPU (NOT i915 — Xe2 uses a different driver)
 lspci -k | grep -A3 -i "VGA\|Display"
-# Debe mostrar: Kernel driver in use: xe
+# Expected: Kernel driver in use: xe
 
-# Dispositivos DRI disponibles
+# Available DRI devices
 ls -la /dev/dri/
-# Esperado: card1, renderD128
+# Expected: card1, renderD128
 ```
 
-### 2.2 Grupos de usuario
+### 2.2 User groups
 
 ```bash
-# Añadir usuario a los grupos render y video
+# Add user to render and video groups
 sudo usermod -aG render,video $USER
 
-# Verificar membresía
+# Verify membership
 groups $USER
-# Debe incluir: render video
+# Must include: render video
 
-# IMPORTANTE: cerrar sesión y volver a entrar para que los grupos se activen.
+# IMPORTANT: log out and back in for the groups to take effect.
 ```
 
-### 2.3 Dependencias de compilación
+### 2.3 Build dependencies
 
 ```bash
 sudo apt update
@@ -103,18 +103,18 @@ sudo apt install -y \
 
 ## 3. Intel GPU Compute Runtime (Level Zero — host-side) ✅
 
-Este paso instala las librerías userspace de Level Zero en el host Ubuntu 24.04.
-Son las que permiten que el runtime SYCL se comunique con el driver `xe` del kernel.
+This step installs the Level Zero userspace libraries on the Ubuntu 24.04 host.
+These are what allow the SYCL runtime to communicate with the kernel's `xe` driver.
 
-> **Método validado en Lunar Lake (Xe2):** el repositorio oficial de Intel (`repositories.intel.com/gpu/ubuntu noble`) **no incluye** paquetes actualizados para Xe2. El único método que funciona es el **PPA de Canonical Intel Graphics Preview**, mantenido en colaboración con Intel:
+> **Validated method for Lunar Lake (Xe2):** the official Intel repository (`repositories.intel.com/gpu/ubuntu noble`) **does not include** updated packages for Xe2. The only working method is the **Canonical Intel Graphics Preview PPA**, maintained in collaboration with Intel:
 > [`https://github.com/canonical/intel-graphics-preview`](https://github.com/canonical/intel-graphics-preview)
 
 ```bash
-# Añadir el PPA de Canonical Intel Graphics Preview
+# Add the Canonical Intel Graphics Preview PPA
 sudo add-apt-repository ppa:ubuntu-oem/intel-graphics-preview
 sudo apt update
 
-# Instalar compute runtime con soporte Xe2 / Lunar Lake
+# Install compute runtime with Xe2 / Lunar Lake support
 sudo apt install -y \
   libze-intel-gpu1 \
   libze1 \
@@ -123,9 +123,9 @@ sudo apt install -y \
   level-zero \
   clinfo
 
-# Verificar detección del GPU vía Level Zero
+# Verify GPU detection via Level Zero
 clinfo -l
-# Esperado:
+# Expected:
 # Platform #0: Intel(R) OpenCL Graphics
 #  -- Device #0: Intel(R) Arc(TM) 140V Graphics
 
@@ -133,16 +133,16 @@ ls /dev/dri/
 # card1  renderD128
 ```
 
-> **Por qué el PPA:** el repositorio `repositories.intel.com/gpu/ubuntu noble` existe pero no contiene versiones compatibles con Xe2/Lunar Lake para Ubuntu 24.04 Noble. El PPA `ubuntu-oem/intel-graphics-preview` es el canal oficial Intel+Canonical para hardware reciente. Es el mismo repo utilizado en el stack IPEX-LLM anterior.
+> **Why the PPA:** the `repositories.intel.com/gpu/ubuntu noble` repository exists but does not contain versions compatible with Xe2/Lunar Lake for Ubuntu 24.04 Noble. The `ubuntu-oem/intel-graphics-preview` PPA is the official Intel+Canonical channel for recent hardware. It is the same repo used in the previous IPEX-LLM stack.
 
 ---
 
-## 4. oneAPI — compilador SYCL e Intel MKL ⚠️
+## 4. oneAPI — SYCL compiler and Intel MKL ⚠️
 
-> **Nota de arquitectura:** el repositorio `apt.repos.intel.com/oneapi` (compilador + MKL) es **distinto** del repositorio de GPU drivers que no funciona con Xe2. Los paquetes oneAPI del compilador sí funcionan en Ubuntu 24.04 Noble.
+> **Architecture note:** the `apt.repos.intel.com/oneapi` repository (compiler + MKL) is **separate** from the GPU driver repository that does not work with Xe2. The oneAPI compiler packages do work on Ubuntu 24.04 Noble.
 
 ```bash
-# Añadir GPG key y repositorio oneAPI
+# Add GPG key and oneAPI repository
 wget -O- https://apt.repos.intel.com/intel-gpg-keys/GPG-PUB-KEY-INTEL-SW-PRODUCTS.PUB \
   | gpg --dearmor \
   | sudo tee /usr/share/keyrings/oneapi-archive-keyring.gpg > /dev/null
@@ -153,42 +153,42 @@ echo "deb [signed-by=/usr/share/keyrings/oneapi-archive-keyring.gpg] \
 
 sudo apt update
 
-# Instalar compilador SYCL (icx/icpx) + MKL
+# Install SYCL compiler (icx/icpx) + MKL
 sudo apt install -y \
   intel-oneapi-dpcpp-cpp \
   intel-oneapi-mkl \
   intel-oneapi-mkl-devel
 
-# Verificar instalación
+# Verify installation
 source /opt/intel/oneapi/setvars.sh
 
 icx --version
 # Intel(R) oneAPI DPC++/C++ Compiler ...
 
-# Verificar que sycl-ls detecta el Arc 140V
+# Verify that sycl-ls detects the Arc 140V
 sycl-ls
-# Esperado (entre otros):
+# Expected (among others):
 # [opencl:gpu][opencl:0] Intel(R) OpenCL Graphics, Intel(R) Arc(TM) 140V Graphics ...
 # [level_zero:gpu][level_zero:0] Intel(R) Level-Zero, Intel(R) Arc(TM) 140V Graphics ...
 ```
 
-> ⚠️ **Si `sycl-ls` no muestra el Arc 140V:** el problema es el Level Zero runtime (§3), no el compilador. Verificar que `clinfo -l` sí muestra el GPU antes de continuar.
+> ⚠️ **If `sycl-ls` does not show the Arc 140V:** the problem is the Level Zero runtime (§3), not the compiler. Verify that `clinfo -l` shows the GPU before continuing.
 
-> **`setvars.sh`**: este script configura `PATH`, `LD_LIBRARY_PATH`, `MKLROOT` y variables de entorno necesarias para icx/icpx y MKL. Debe ejecutarse en cada sesión de terminal antes de compilar o arrancar el servidor. Ver §6 para activación automática vía systemd.
+> **`setvars.sh`**: this script sets up `PATH`, `LD_LIBRARY_PATH`, `MKLROOT` and other environment variables needed for icx/icpx and MKL. It must be run in each terminal session before building or starting the server. See §6 for automatic activation via systemd.
 
 ---
 
-## 5. Compilación de llama.cpp con backend SYCL ⚠️
+## 5. Building llama.cpp with SYCL backend ⚠️
 
 ```bash
-# Clonar llama.cpp
+# Clone llama.cpp
 git clone https://github.com/ggml-org/llama.cpp.git
 cd llama.cpp
 
-# Activar entorno oneAPI (si no está ya activo)
+# Activate oneAPI environment (if not already active)
 source /opt/intel/oneapi/setvars.sh
 
-# Compilar con backend SYCL
+# Build with SYCL backend
 cmake -B build \
   -DGGML_SYCL=ON \
   -DCMAKE_C_COMPILER=icx \
@@ -199,38 +199,38 @@ cmake -B build \
 cmake --build build --config Release -j$(nproc) \
   --target llama-server llama-bench llama-cli
 
-# Verificar que el binario detecta el GPU
+# Verify the binary detects the GPU
 ./build/bin/llama-server --list-devices
-# Debe listar Intel Arc 140V como dispositivo disponible
+# Should list Intel Arc 140V as an available device
 ```
 
-> **`DGGML_SYCL_F16=ON`**: activa operaciones en FP16 en el backend SYCL. Reduce el uso de memoria y puede mejorar el throughput en hardware con soporte nativo FP16 como el Arc 140V Xe2. Pendiente de verificar impacto real en este hardware.
+> **`DGGML_SYCL_F16=ON`**: enables FP16 operations in the SYCL backend. Reduces memory usage and can improve throughput on hardware with native FP16 support such as the Arc 140V Xe2. Real impact on this hardware is pending verification.
 
-> **Tiempo de compilación:** la compilación con icx/icpx tarda más que con gcc/clang por la profundidad de optimizaciones SYCL. Esperar 5–15 minutos en función del número de cores disponibles.
+> **Build time:** compiling with icx/icpx takes longer than with gcc/clang due to the depth of SYCL optimizations. Expect 5–15 minutes depending on the number of available cores.
 
-> **`nproc`**: usa todos los cores disponibles. En el Core Ultra 7 258V (8 cores), `-j8` es equivalente. Puedes reducir a `-j4` si necesitas usar el equipo durante la compilación.
+> **`nproc`**: uses all available cores. On the Core Ultra 7 258V (8 cores), `-j8` is equivalent. You can reduce to `-j4` if you need to use the machine during the build.
 
 ---
 
-## 6. llama-server — configuración y arranque ⚠️
+## 6. llama-server — configuration and startup ⚠️
 
-### 6.1 Variables de entorno SYCL
+### 6.1 SYCL environment variables
 
 ```bash
-# Activar oneAPI (necesario en cada sesión)
+# Activate oneAPI (required each session)
 source /opt/intel/oneapi/setvars.sh
 
-# Seleccionar el Arc 140V (primer dispositivo Level Zero)
+# Select the Arc 140V (first Level Zero device)
 export GGML_SYCL_DEVICE=0
 
-# Cache persistente de kernels SYCL compilados (evita recompilación en cada arranque)
+# Persistent cache of compiled SYCL kernels (avoids recompilation on each startup)
 export SYCL_CACHE_PERSISTENT=1
 
-# Permite que el runtime consulte métricas del GPU
+# Allows the runtime to query GPU metrics
 export ZES_ENABLE_SYSMAN=1
 ```
 
-### 6.2 Arrancar el servidor
+### 6.2 Start the server
 
 ```bash
 cd ~/llm/llama-cpp-arc/llama.cpp
@@ -244,49 +244,49 @@ cd ~/llm/llama-cpp-arc/llama.cpp
   --parallel 1 \
   --log-disable
 
-# Verificar que el servidor responde
+# Verify the server responds
 curl http://localhost:8080/health
 # {"status":"ok"}
 ```
 
-| Parámetro | Valor | Descripción |
+| Parameter | Value | Description |
 |---|---|---|
-| `--n-gpu-layers 999` | 999 (todas) | Carga todas las capas en GPU — sin split CPU/GPU |
-| `--ctx-size` | 8192 | Contexto por defecto; subir a 16384–32768 según modelo y RAM disponible |
-| `--parallel` | 1 | Single-user explícito — evita reservar buffers para peticiones paralelas |
-| `--port` | 8080 | Puerto del API (distinto de Ollama que usa 11434) |
-| `--host` | 0.0.0.0 | Escuchar en todas las interfaces |
+| `--n-gpu-layers 999` | 999 (all) | Load all layers onto GPU — no CPU/GPU split |
+| `--ctx-size` | 8192 | Default context; increase to 16384–32768 depending on model and available RAM |
+| `--parallel` | 1 | Explicit single-user — avoids reserving buffers for parallel requests |
+| `--port` | 8080 | API port (different from Ollama which uses 11434) |
+| `--host` | 0.0.0.0 | Listen on all interfaces |
 
-### 6.3 Primera carga de modelo
+### 6.3 First model load
 
-La primera vez que se carga un modelo, el runtime SYCL compila los kernels para el hardware específico (Arc 140V Xe2). Esto tarda **2–5 minutos** y es completamente normal. Las compilaciones se cachean en `~/.cache/sycl/` y las cargas posteriores son casi instantáneas.
+The first time a model is loaded, the SYCL runtime compiles the kernels for the specific hardware (Arc 140V Xe2). This takes **2–5 minutes** and is completely normal. The compiled kernels are cached in `~/.cache/sycl/` and subsequent loads are nearly instantaneous.
 
 ```bash
-# Ver logs del servidor durante la primera carga
-# El servidor imprime el progreso de compilación SYCL en stderr
+# Follow server logs during first load
+# The server prints SYCL compilation progress to stderr
 ```
 
-### 6.4 Script de arranque
+### 6.4 Startup script
 
-Crear `~/llm/llama-cpp-arc/start-server.sh`:
+Create `~/llm/llama-cpp-arc/start-server.sh`:
 
 ```bash
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Directorio del proyecto
+# Project directory
 LLAMACPP_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/llama.cpp" && pwd)"
 MODELS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/models" && pwd)"
 
-# Activar oneAPI
+# Activate oneAPI
 source /opt/intel/oneapi/setvars.sh --force
 
-# Variables SYCL
+# SYCL variables
 export GGML_SYCL_DEVICE=0
 export SYCL_CACHE_PERSISTENT=1
 export ZES_ENABLE_SYSMAN=1
 
-# Modelo por defecto (pasar como argumento para cambiarlo)
+# Default model (pass as argument to override)
 MODEL="${1:-${MODELS_DIR}/qwen2.5-coder-14b-instruct-q4_k_m.gguf}"
 
 exec "${LLAMACPP_DIR}/build/bin/llama-server" \
@@ -301,55 +301,55 @@ exec "${LLAMACPP_DIR}/build/bin/llama-server" \
 ```bash
 chmod +x ~/llm/llama-cpp-arc/start-server.sh
 
-# Uso
-./start-server.sh                                          # modelo por defecto
-./start-server.sh models/qwen3-8b-q4_k_m.gguf            # modelo específico
+# Usage
+./start-server.sh                                          # default model
+./start-server.sh models/qwen3-8b-q4_k_m.gguf            # specific model
 ```
 
 ---
 
-## 7. Modelos recomendados ⚠️
+## 7. Recommended models ⚠️
 
-### Presupuesto de memoria
+### Memory budget
 
-- RAM total: 32 GB
-- OS + escritorio + apps en uso: ~11–12 GB
-- Disponible para modelos (medido con IPEX-LLM): ~19–20 GB tras reboot limpio
-- **Techo seguro en uso cotidiano: 16 GB de modelo**
+- Total RAM: 32 GB
+- OS + desktop + apps in use: ~11–12 GB
+- Available for models (measured with IPEX-LLM): ~19–20 GB after clean reboot
+- **Safe ceiling in daily use: 16 GB of model**
 
-> Con 32 GB de RAM unificada no es posible separar "VRAM del GPU" del resto de la RAM. El Arc 140V accede a la misma piscina LPDDR5X que el CPU.
+> With 32 GB of unified RAM it is not possible to separate "GPU VRAM" from the rest of RAM. The Arc 140V accesses the same LPDDR5X pool as the CPU.
 
-> ⚠️ **Comportamiento del driver xe:** una vez el driver xe asigna páginas de RAM al pool GPU (al cargar el primer modelo), no las devuelve al sistema aunque el modelo se descargue. La memoria solo se recupera completamente con un reboot o `echo 3 > /proc/sys/vm/drop_caches` tras parar el servidor.
+> ⚠️ **xe driver behavior:** once the xe driver assigns RAM pages to the GPU pool (on first model load), it does not return them to the system even if the model is unloaded. Memory is only fully recovered with a reboot or `echo 3 > /proc/sys/vm/drop_caches` after stopping the server.
 
-### 7.1 Modelos recomendados (GGUFs de Hugging Face)
+### 7.1 Recommended models (GGUFs from Hugging Face)
 
-Usar siempre publishers verificados: **bartowski**, **unsloth**, **lmstudio-community**. No usar publishers desconocidos.
+Always use verified publishers: **bartowski**, **unsloth**, **lmstudio-community**. Do not use unknown publishers.
 
-| Modelo | Quant | Tamaño disco | Rol | Fuente HF |
+| Model | Quant | Disk size | Role | HF source |
 |---|---|---|---|---|
-| Qwen2.5-Coder-14B-Instruct | Q4\_K\_M | ~9.0 GB | Coding agentic (Cline) | bartowski |
-| Qwen3-8B | Q4\_K\_M | ~5.2 GB | Razonamiento / contexto largo | unsloth |
-| Llama-3.1-8B-Instruct | Q4\_K\_M | ~4.9 GB | General rápido | bartowski |
-| Gemma-3-12B-IT | Q4\_K\_M | ~8.1 GB | General / visión | bartowski |
-| Phi-4-mini-Instruct | Q4\_K\_M | ~2.5 GB | Autocompletado FIM (Twinny) | bartowski |
+| Qwen2.5-Coder-14B-Instruct | Q4\_K\_M | ~9.0 GB | Agentic coding (Cline) | bartowski |
+| Qwen3-8B | Q4\_K\_M | ~5.2 GB | Reasoning / long context | unsloth |
+| Llama-3.1-8B-Instruct | Q4\_K\_M | ~4.9 GB | Fast general purpose | bartowski |
+| Gemma-3-12B-IT | Q4\_K\_M | ~8.1 GB | General / vision | bartowski |
+| Phi-4-mini-Instruct | Q4\_K\_M | ~2.5 GB | FIM autocomplete (Twinny) | bartowski |
 
-> Los valores de RAM runtime con llama.cpp SYCL **están pendientes de medición**. Como referencia, IPEX-LLM con Flash Attention usaba ~40 % menos que el tamaño en disco.
+> Runtime RAM values with llama.cpp SYCL **are pending measurement**. As a reference, IPEX-LLM with Flash Attention used ~40% less than the on-disk model size.
 
-### 7.2 Descarga de modelos
+### 7.2 Downloading models
 
 ```bash
-# Instalar huggingface-cli
+# Install huggingface-cli
 pip install --user huggingface-hub
 
 mkdir -p ~/llm/llama-cpp-arc/models
 
-# Descargar modelo específico (ejemplo: Qwen2.5-Coder-14B Q4_K_M)
+# Download a specific model (example: Qwen2.5-Coder-14B Q4_K_M)
 huggingface-cli download \
   bartowski/Qwen2.5-Coder-14B-Instruct-GGUF \
   Qwen2.5-Coder-14B-Instruct-Q4_K_M.gguf \
   --local-dir ~/llm/llama-cpp-arc/models
 
-# Descargar Qwen3-8B
+# Download Qwen3-8B
 huggingface-cli download \
   unsloth/Qwen3-8B-GGUF \
   Qwen3-8B-Q4_K_M.gguf \
@@ -358,12 +358,12 @@ huggingface-cli download \
 
 ---
 
-## 8. Gestión de modelos y benchmarking ⚠️
+## 8. Model management and benchmarking ⚠️
 
-### 8.1 Verificar inferencia GPU
+### 8.1 Verify GPU inference
 
 ```bash
-# Con el servidor arrancado, enviar un prompt y verificar respuesta
+# With the server running, send a prompt and verify the response
 curl -s http://localhost:8080/completion \
   -H "Content-Type: application/json" \
   -d '{
@@ -372,7 +372,7 @@ curl -s http://localhost:8080/completion \
     "stream": false
   }' | python3 -m json.tool | grep -E '"content"|"tokens_per_second"|"timings"'
 
-# API compatible OpenAI (chat completions)
+# OpenAI-compatible API (chat completions)
 curl -s http://localhost:8080/v1/chat/completions \
   -H "Content-Type: application/json" \
   -d '{
@@ -382,56 +382,56 @@ curl -s http://localhost:8080/v1/chat/completions \
   }' | python3 -m json.tool
 ```
 
-### 8.2 Monitorización del GPU durante inferencia ✅
+### 8.2 GPU monitoring during inference ✅
 
-> `intel_gpu_top` **no funciona** con el driver `xe` (Lunar Lake/Xe2). Usa `xpu-smi` en su lugar.
+> `intel_gpu_top` **does not work** with the `xe` driver (Lunar Lake/Xe2). Use `xpu-smi` instead.
 
 ```bash
-# Snapshot puntual
+# Point-in-time snapshot
 xpu-smi stats -d 0
 
-# Monitorización continua: utilización + memoria + frecuencia
-# -m 0=GPU_UTIL, 5=MEM_UTIL, 18=MEM_USED  |  -i intervalo en segundos
+# Continuous monitoring: utilization + memory + frequency
+# -m 0=GPU_UTIL, 5=MEM_UTIL, 18=MEM_USED  |  -i interval in seconds
 sudo xpu-smi dump -d 0 -m 0,5,18 -i 1
 
-# Sin sudo (sin utilización de engines, el resto funciona)
+# Without sudo (no engine utilization, rest works)
 xpu-smi dump -d 0 -m 5,18 -i 1
 
-# Frecuencia activa via sysfs (sin herramientas extra)
+# Active frequency via sysfs (no extra tools needed)
 watch -n1 'echo "Act: $(cat /sys/class/drm/card1/device/tile0/gt0/freq0/act_freq) MHz" && \
            echo "Cur: $(cat /sys/class/drm/card1/device/tile0/gt0/freq0/cur_freq) MHz"'
 ```
 
-**Combinación práctica durante inferencia** (dos terminales):
+**Practical combination during inference** (two terminals):
 ```bash
 # Terminal 1 — GPU
 sudo xpu-smi dump -d 0 -m 0,5,18 -i 1
 
-# Terminal 2 — memoria del sistema
+# Terminal 2 — system memory
 watch -n1 'grep -E "MemFree|MemAvailable" /proc/meminfo'
 ```
 
-### 8.3 Benchmark con llama-bench
+### 8.3 Benchmark with llama-bench
 
 ```bash
-# Benchmark básico: prefill y generación
+# Basic benchmark: prefill and generation
 ./build/bin/llama-bench \
   -m models/qwen3-8b-q4_k_m.gguf \
   -n 128 \
   -ngl 999
 
-# Opciones útiles:
-# -n <tokens>       tokens a generar
-# -p <tokens>       tokens de prompt (prefill)
-# -ngl <layers>     capas en GPU (999 = todas)
-# -t <threads>      threads CPU (relevante solo si algunas capas van a CPU)
+# Useful options:
+# -n <tokens>       tokens to generate
+# -p <tokens>       prompt tokens (prefill)
+# -ngl <layers>     GPU layers (999 = all)
+# -t <threads>      CPU threads (relevant only if some layers run on CPU)
 ```
 
-> Los resultados de `llama-bench` se añadirán a este documento una vez validados en Arc 140V.
+> llama-bench results will be added to this document once validated on the Arc 140V.
 
-**Referencia baseline — IPEX-LLM (mismos modelos Q4\_K\_M, Arc 140V, CTX=8192):**
+**Baseline reference — IPEX-LLM (same models Q4\_K\_M, Arc 140V, CTX=8192):**
 
-| Modelo | Gen tok/s | Prefill tok/s | TTFT ms |
+| Model | Gen tok/s | Prefill tok/s | TTFT ms |
 |---|---|---|---|
 | qwen2.5-coder:7b | 20.0 | 814 | 56 ms |
 | qwen3:8b | 18.1 | 522 | 62 ms |
@@ -441,58 +441,58 @@ watch -n1 'grep -E "MemFree|MemAvailable" /proc/meminfo'
 
 ---
 
-## 9. Integración con herramientas externas ⚠️
+## 9. Integration with external tools ⚠️
 
-El endpoint de llama-server es compatible con la spec de OpenAI. La diferencia respecto al stack IPEX-LLM es el puerto (`8080` en lugar de `11434`) y que no hay registro de modelos — el modelo se especifica al arrancar el servidor, no al llamar a la API.
+The llama-server endpoint is compatible with the OpenAI spec. The difference from the IPEX-LLM stack is the port (`8080` instead of `11434`) and the absence of a model registry — the model is specified when starting the server, not when calling the API.
 
-### 9.1 Datos de conexión
+### 9.1 Connection details
 
-| Parámetro | Valor |
+| Parameter | Value |
 |---|---|
-| Endpoint OpenAI-compatible | `http://localhost:8080/v1` |
-| Endpoint llama.cpp nativo | `http://localhost:8080` |
-| API Key | cualquier valor no vacío (p.ej. `llama`) |
-| Modelos disponibles | el modelo activo al arrancar el servidor |
+| OpenAI-compatible endpoint | `http://localhost:8080/v1` |
+| Native llama.cpp endpoint | `http://localhost:8080` |
+| API Key | any non-empty value (e.g. `llama`) |
+| Available models | the model active when the server was started |
 
-### 9.2 VS Code — extensiones
+### 9.2 VS Code — extensions
 
-#### Twinny — autocompletado inline + chat
+#### Twinny — inline autocomplete + chat
 
-| Ajuste | Valor |
+| Setting | Value |
 |---|---|
 | API hostname | `localhost` |
 | API port | `8080` |
-| Fill-in-middle model | `phi4-mini` (o el nombre que aparezca en `/v1/models`) |
+| Fill-in-middle model | `phi4-mini` (or the name shown in `/v1/models`) |
 | Chat model | `qwen3:8b` |
-| API provider | `llamacpp` u `OpenAI Compatible` |
+| API provider | `llamacpp` or `OpenAI Compatible` |
 
-> ⚠️ Verificar qué valor de `model` acepta Twinny cuando el backend es llama-server (el campo puede requerir el nombre del fichero GGUF o cualquier string según la versión).
+> ⚠️ Verify what `model` value Twinny accepts when the backend is llama-server (the field may require the GGUF filename or any string depending on the version).
 
-#### Cline / Roo Code — agente de codificación
+#### Cline / Roo Code — coding agent
 
-| Ajuste | Valor |
+| Setting | Value |
 |---|---|
 | API Provider | `OpenAI Compatible` |
 | Base URL | `http://localhost:8080/v1` |
 | API Key | `llama` |
-| Model | (nombre que devuelva `/v1/models`) |
+| Model | (name returned by `/v1/models`) |
 
-#### CodeGPT — chat simple
+#### CodeGPT — simple chat
 
-| Ajuste | Valor |
+| Setting | Value |
 |---|---|
 | LLM Provider | `Custom` / `OpenAI Compatible` |
 | API URL | `http://localhost:8080/v1` |
-| Model | (nombre del modelo activo) |
+| Model | (name of the active model) |
 
-### 9.3 API compatible con OpenAI (scripts Python)
+### 9.3 OpenAI-compatible API (Python scripts)
 
 ```python
 from openai import OpenAI
 
 client = OpenAI(
     base_url="http://localhost:8080/v1",
-    api_key="llama",  # Requerido por el cliente pero ignorado por llama-server
+    api_key="llama",  # Required by the client but ignored by llama-server
 )
 
 response = client.chat.completions.create(
@@ -508,7 +508,7 @@ print(response.choices[0].message.content)
 
 ---
 
-## 10. Systemd service (autoarranque) ⚠️
+## 10. Systemd service (autostart) ⚠️
 
 ```bash
 sudo tee /etc/systemd/system/llama-server.service > /dev/null <<'EOF'
@@ -522,7 +522,7 @@ Type=simple
 User=YOUR_USER
 WorkingDirectory=/home/YOUR_USER/llm/llama-cpp-arc
 
-# Activar oneAPI antes de arrancar el servidor
+# Activate oneAPI before starting the server
 ExecStartPre=/bin/bash -c 'source /opt/intel/oneapi/setvars.sh --force'
 ExecStart=/home/YOUR_USER/llm/llama-cpp-arc/start-server.sh
 
@@ -538,41 +538,41 @@ TimeoutStartSec=120
 WantedBy=multi-user.target
 EOF
 
-# Reemplazar YOUR_USER con tu usuario
+# Replace YOUR_USER with your username
 sudo sed -i "s/YOUR_USER/$USER/g" /etc/systemd/system/llama-server.service
 
-# Habilitar
+# Enable
 sudo systemctl daemon-reload
 sudo systemctl enable --now llama-server.service
 
-# Estado
+# Status
 sudo systemctl status llama-server.service
 ```
 
-> ⚠️ **`source` en ExecStartPre:** systemd no propaga variables de entorno entre directivas. Puede ser necesario inline el contenido de `setvars.sh` en el service o usar `EnvironmentFile`. Pendiente de validar la forma correcta de activar oneAPI en un service unit.
+> ⚠️ **`source` in ExecStartPre:** systemd does not propagate environment variables between directives. It may be necessary to inline the content of `setvars.sh` into the service or use `EnvironmentFile`. The correct way to activate oneAPI in a service unit is pending validation.
 
 ---
 
-## 11. Tuning de SO para rendimiento ✅
+## 11. OS tuning for performance ✅
 
-Dos ficheros de configuración que mejoran la estabilidad y el rendimiento de la inferencia. Independientes del servidor — persisten a través de reboots. Idénticos a los del stack IPEX-LLM anterior.
+Two configuration files that improve inference stability and performance. Independent of the server — persist across reboots. Identical to those in the previous IPEX-LLM stack.
 
 ### sysctl (`/etc/sysctl.d/99-llm-performance.conf`)
 
 ```bash
 sudo tee /etc/sysctl.d/99-llm-performance.conf > /dev/null <<'EOF'
-# Memoria
-vm.swappiness = 10               # Evitar swap con 30 GB de RAM disponibles
-vm.dirty_background_ratio = 5    # Flush de escrituras al 5%
+# Memory
+vm.swappiness = 10               # Avoid swap with 30 GB of available RAM
+vm.dirty_background_ratio = 5    # Flush writes at 5%
 vm.dirty_ratio = 15
-vm.vfs_cache_pressure = 50       # Retener caché de inodos/dentries — carga de modelos más rápida
-vm.min_free_kbytes = 524288      # Reservar 512 MB libres
+vm.vfs_cache_pressure = 50       # Retain inode/dentry cache — faster model loads
+vm.min_free_kbytes = 524288      # Reserve 512 MB free
 
-# Red (API localhost:8080)
-net.ipv4.tcp_fastopen = 3        # Reduce latencia en conexiones TCP localhost
+# Network (API at localhost:8080)
+net.ipv4.tcp_fastopen = 3        # Reduce latency on localhost TCP connections
 EOF
 
-# Aplicar sin reboot
+# Apply without reboot
 sudo sysctl -p /etc/sysctl.d/99-llm-performance.conf
 ```
 
@@ -598,9 +598,9 @@ EOF
 sudo systemctl daemon-reload && sudo systemctl enable --now cpu-performance.service
 ```
 
-> **`Before=llama-server.service`:** el governor debe estar activo antes de que el servidor empiece a compilar kernels SYCL en el primer arranque.
+> **`Before=llama-server.service`:** the governor must be active before the server starts compiling SYCL kernels on first boot.
 
-Verificación:
+Verification:
 
 ```bash
 cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor  # performance
@@ -612,87 +612,87 @@ cat /proc/sys/vm/swappiness                                 # 10
 
 ## 12. Troubleshooting
 
-### `sycl-ls` no muestra el Arc 140V
+### `sycl-ls` does not show the Arc 140V
 
 ```bash
-# Verificar que Level Zero detecta el GPU
+# Verify Level Zero detects the GPU
 clinfo -l
-# Si no aparece "Intel Arc" → problema de Level Zero en el host (ver §3)
+# If "Intel Arc" does not appear → Level Zero host-side problem (see §3)
 
-# Verificar grupos del usuario
+# Verify user groups
 groups $USER
-# Debe incluir: render video
+# Must include: render video
 
-# Si los grupos no están activos después de añadirlos:
-newgrp render  # Activar en la sesión actual sin cerrar sesión
+# If groups are not active after being added:
+newgrp render  # Activate in current session without logging out
 ```
 
-### Error de compilación: `icx: command not found`
+### Build error: `icx: command not found`
 
 ```bash
-# oneAPI no está activado en la sesión actual
+# oneAPI is not activated in the current session
 source /opt/intel/oneapi/setvars.sh
 icx --version
 ```
 
-### El servidor no detecta el GPU (inferencia va a CPU)
+### Server does not detect GPU (inference falls back to CPU)
 
 ```bash
-# Verificar que el servidor ve el GPU al arrancar
+# Verify the server sees the GPU at startup
 ./build/bin/llama-server --list-devices
-# Si no muestra "Intel Arc" → SYCL no está configurado correctamente
+# If "Intel Arc" is not shown → SYCL is not configured correctly
 
-# Verificar que sycl-ls funciona antes de arrancar el servidor
+# Verify sycl-ls works before starting the server
 source /opt/intel/oneapi/setvars.sh
 sycl-ls
 
-# Durante inferencia activa, verificar utilización GPU:
+# During active inference, verify GPU utilization:
 sudo xpu-smi dump -d 0 -m 0,5,18 -i 1
-# GPU util (columna 0) debe ser > 80 % durante generación
-# Si GPU util ~0 % → la inferencia está yendo por CPU
+# GPU util (column 0) should be > 80% during generation
+# If GPU util ~0% → inference is running on CPU
 ```
 
-### Error SYCL en tiempo de ejecución: "No device of requested type available"
+### SYCL runtime error: "No device of requested type available"
 
 ```bash
-# Causa más probable: Level Zero no detecta el GPU correctamente
-# o GGML_SYCL_DEVICE apunta a un índice incorrecto
+# Most likely cause: Level Zero does not detect the GPU correctly
+# or GGML_SYCL_DEVICE points to a wrong index
 
-# Ver dispositivos disponibles
+# List available devices
 source /opt/intel/oneapi/setvars.sh && sycl-ls
 
-# Probar con GGML_SYCL_DEVICE=0 (primer GPU)
+# Try with GGML_SYCL_DEVICE=0 (first GPU)
 GGML_SYCL_DEVICE=0 ./build/bin/llama-server --list-devices
 ```
 
-### Primera inferencia tarda 2–5 minutos
+### First inference takes 2–5 minutes
 
-Comportamiento normal. El runtime SYCL compila los kernels para el Arc 140V Xe2 en el primer uso. Las compilaciones se cachean en `~/.cache/sycl/` (con `SYCL_CACHE_PERSISTENT=1` activo). Las cargas posteriores son casi instantáneas.
+Normal behavior. The SYCL runtime compiles kernels for the Arc 140V Xe2 on first use. Compilations are cached in `~/.cache/sycl/` (with `SYCL_CACHE_PERSISTENT=1` active). Subsequent loads are nearly instantaneous.
 
-### Memoria RAM no se recupera tras parar el servidor
+### RAM is not recovered after stopping the server
 
 ```bash
-# Verificar memoria antes de liberar
+# Check memory before releasing
 xpu-smi dump -d 0 -m 5 -i 1 -n 1
 
-# Liberar pool GPU sin reboot (parar servidor primero)
+# Release GPU pool without reboot (stop server first)
 sudo sync && sudo sh -c 'echo 3 > /proc/sys/vm/drop_caches'
 sudo swapoff -a && sudo swapon -a
 
-# Verificar resultado
+# Verify result
 free -h
 ```
 
-> El driver `xe` retiene páginas en el pool GPU aunque el servidor esté parado. `drop_caches` fuerza la liberación del page cache. El reboot sigue siendo la opción más limpia pero no es necesario.
+> The `xe` driver retains pages in the GPU pool even when the server is stopped. `drop_caches` forces page cache release. A reboot remains the cleanest option but is not required.
 
-### OOM — el modelo no carga
+### OOM — model fails to load
 
 ```bash
-# Verificar memoria disponible
+# Check available memory
 free -h
 
-# Si MemAvailable < tamaño del modelo → liberar memoria (ver arriba)
-# o usar un modelo más pequeño / quantización más agresiva (IQ4_XS en lugar de Q4_K_M)
+# If MemAvailable < model size → release memory (see above)
+# or use a smaller model / more aggressive quantization (IQ4_XS instead of Q4_K_M)
 ```
 
 ---
@@ -700,35 +700,35 @@ free -h
 ## Quick Reference
 
 ```bash
-# Activar entorno oneAPI (necesario antes de compilar o arrancar)
+# Activate oneAPI environment (required before building or starting)
 source /opt/intel/oneapi/setvars.sh
 
-# Verificar GPU
+# Verify GPU
 sycl-ls
 clinfo -l
 
-# Arrancar servidor (modelo por defecto)
+# Start server (default model)
 ./start-server.sh
 
-# Arrancar con modelo específico
+# Start with specific model
 ./start-server.sh models/qwen3-8b-q4_k_m.gguf
 
-# Verificar que el servidor responde
+# Verify server responds
 curl http://localhost:8080/health
 
-# Test rápido de inferencia
+# Quick inference test
 curl -s http://localhost:8080/completion \
   -d '{"prompt":"Hello","n_predict":16,"stream":false}' \
   | python3 -c "import sys,json; d=json.load(sys.stdin); \
     t=d['timings']; print(f\"{t['predicted_per_second']:.1f} tok/s\")"
 
-# Monitorización GPU durante inferencia
+# GPU monitoring during inference
 sudo xpu-smi dump -d 0 -m 0,5,18 -i 1
 
 # Benchmark
-./build/bin/llama-bench -m models/<modelo>.gguf -n 128 -ngl 999
+./build/bin/llama-bench -m models/<model>.gguf -n 128 -ngl 999
 
-# Recompilar llama.cpp (tras pull de nuevas versiones)
+# Rebuild llama.cpp (after pulling new versions)
 source /opt/intel/oneapi/setvars.sh
 cmake --build build --config Release -j$(nproc) \
   --target llama-server llama-bench llama-cli
