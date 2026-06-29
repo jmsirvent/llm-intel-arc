@@ -1,25 +1,25 @@
-# llama.cpp SYCL nativo — Intel Arc 140V (Yoga Slim 7)
+# llama.cpp native SYCL — Intel Arc 140V (Yoga Slim 7)
 **Ubuntu 24.04 LTS · Intel Core Ultra 7 258V · Intel Arc 140V (Xe2) · 32 GB LPDDR5X**
 
-Sucesor de `../ipex-llm/` — llama.cpp upstream compilado con `GGML_SYCL=ON`, sin Docker.
+Successor to `../ipex-llm/` — llama.cpp upstream compiled with `GGML_SYCL=ON`, no Docker.
 
 ---
 
-## Por qué este stack
+## Why this stack
 
-`intel/ipex-llm` fue archivado en enero 2026 con security issues sin resolver y su imagen Docker congelada, sin soporte para modelos nuevos ni features como speculative decoding. Este proyecto usa llama.cpp upstream directamente, compilado con el backend SYCL nativo de Intel oneAPI.
+`intel/ipex-llm` was archived in January 2026 with unresolved security issues and its Docker image frozen, with no support for new models or features like speculative decoding. This project uses llama.cpp upstream directly, compiled with Intel oneAPI's native SYCL backend.
 
-Lo que se gana frente al stack anterior:
+What you gain over the previous stack:
 
-- **Speculative decoding** (draft model) — potencial +50–150 % en generación
-- **IQ quantizations** (IQ4\_XS, IQ3\_M) — mejor calidad por GB que K\_M
-- **Modelos al día** con llama.cpp upstream
-- **Security patches** continuos
+- **Speculative decoding** (draft model) — potential +50–150% on generation throughput
+- **IQ quantizations** (IQ4\_XS, IQ3\_M) — better quality per GB than K\_M
+- **Up-to-date models** with llama.cpp upstream
+- **Continuous security patches**
 
-## Arquitectura
+## Architecture
 
 ```
-VS Code (Twinny / Cline / Roo Code) · Open WebUI · Scripts Python
+VS Code (Twinny / Cline / Roo Code) · Open WebUI · Python scripts
                      │
                      │  OpenAI-compatible REST  (localhost:8080)
                      ▼
@@ -29,44 +29,44 @@ VS Code (Twinny / Cline / Roo Code) · Open WebUI · Scripts Python
                      ▼
           Intel Arc 140V  (Xe2, driver xe)
           ──────────────────────────────────
-          LPDDR5X-8533  ·  32 GB  unificada
+          LPDDR5X-8533  ·  32 GB  unified memory
 ```
 
-## Estado del proyecto
+## Project status
 
-> Las secciones pendientes de validación están marcadas con ⚠️ en la guía completa.
+> Sections pending validation are marked with ⚠️ in the full guide.
 
-| Fase | Estado |
+| Phase | Status |
 |---|---|
-| Level Zero / driver xe | ✅ Validado (heredado de IPEX-LLM) |
-| oneAPI — icx/icpx + MKL | ⏳ Pendiente |
-| llama.cpp compilación SYCL | ⏳ Pendiente |
-| llama-server validado en Arc 140V | ⏳ Pendiente |
-| Benchmarks vs IPEX-LLM | ⏳ Pendiente |
-| Speculative decoding | ⏳ Pendiente |
+| Level Zero / xe driver | ✅ Validated (inherited from IPEX-LLM) |
+| oneAPI — icx/icpx + MKL | ⏳ Pending |
+| llama.cpp SYCL build | ⏳ Pending |
+| llama-server validated on Arc 140V | ⏳ Pending |
+| Benchmarks vs IPEX-LLM | ⏳ Pending |
+| Speculative decoding | ⏳ Pending |
 
-## Quick start (una vez compilado)
+## Quick start (once built)
 
 ```bash
-# 1. Activar entorno oneAPI
+# 1. Activate oneAPI environment
 source /opt/intel/oneapi/setvars.sh
 
-# 2. Arrancar el servidor (ajustar ruta al modelo)
+# 2. Start the server (adjust model path)
 ./build/bin/llama-server \
   -m models/qwen2.5-coder-14b-instruct-q4_k_m.gguf \
   --port 8080 \
   --n-gpu-layers 999 \
   --ctx-size 8192
 
-# 3. Verificar
+# 3. Verify
 curl http://localhost:8080/health
 ```
 
-## Línea base de rendimiento — referencia a superar
+## Performance baseline — reference to beat
 
-Medido con IPEX-LLM + Flash Attention en el mismo hardware, Q4\_K\_M, CTX=8192:
+Measured with IPEX-LLM + Flash Attention on the same hardware, Q4\_K\_M, CTX=8192:
 
-| Modelo | Gen tok/s | Prefill tok/s | TTFT ms |
+| Model | Gen tok/s | Prefill tok/s | TTFT ms |
 |---|---|---|---|
 | qwen2.5-coder:7b | 20.0 | 814 | 56 ms |
 | qwen3:8b | 18.1 | 522 | 62 ms |
@@ -74,10 +74,8 @@ Medido con IPEX-LLM + Flash Attention en el mismo hardware, Q4\_K\_M, CTX=8192:
 | gemma3:12b | 10.5 | 240 | 100 ms |
 | qwen2.5:14b-instruct | 10.7 | 451 | 100 ms |
 
-## Documentación completa
+## Full documentation
 
 → **[local-llm-yoga-slim7-ubuntu2404-llamacpp.md](local-llm-yoga-slim7-ubuntu2404-llamacpp.md)**
 
-Incluye: prerequisitos, instalación de Level Zero y oneAPI, compilación de llama.cpp,
-configuración del servidor, modelos recomendados, integración con VS Code, systemd,
-tuning de SO y troubleshooting.
+Covers: prerequisites, Level Zero and oneAPI installation, llama.cpp build, server configuration, recommended models, VS Code integration, systemd, OS tuning, and troubleshooting.

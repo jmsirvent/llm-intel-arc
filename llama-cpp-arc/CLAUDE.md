@@ -1,49 +1,49 @@
-# llama-cpp-arc — llama.cpp SYCL nativo (Intel Arc 140V)
+# llama-cpp-arc — llama.cpp native SYCL (Intel Arc 140V)
 
-Sucesor de `../ipex-llm/`. Contexto de hardware y ecosistema en `../CLAUDE.md`.
-Guía de instalación completa: `local-llm-yoga-slim7-ubuntu2404-llamacpp.md`
+Successor to `../ipex-llm/`. Hardware and ecosystem context in `../CLAUDE.md`.
+Full installation guide: `local-llm-yoga-slim7-ubuntu2404-llamacpp.md`
 
-## Estructura del proyecto
+## Project structure
 
 ```
 llama-cpp-arc/
-├── llama.cpp/          # repositorio clonado — compilar aquí
-│   └── build/bin/      # binarios: llama-server, llama-bench, llama-cli
-├── models/             # GGUFs descargados de Hugging Face
-├── start-server.sh     # script de arranque (activa oneAPI + lanza llama-server)
-└── local-llm-yoga-slim7-ubuntu2404-llamacpp.md  # guía completa de instalación
+├── llama.cpp/          # cloned repository — build here
+│   └── build/bin/      # binaries: llama-server, llama-bench, llama-cli
+├── models/             # GGUFs downloaded from Hugging Face
+├── start-server.sh     # startup script (activates oneAPI + launches llama-server)
+└── local-llm-yoga-slim7-ubuntu2404-llamacpp.md  # full installation guide
 ```
 
-## Comandos de desarrollo
+## Development commands
 
 ```bash
-# Antes de cualquier tarea: activar entorno oneAPI
+# Before any task: activate oneAPI environment
 source /opt/intel/oneapi/setvars.sh
 
-# Verificar GPU
+# Verify GPU
 sycl-ls
 
-# Compilar (tras git pull en llama.cpp/ o cambio de flags)
+# Build (after git pull in llama.cpp/ or flag change)
 cmake --build llama.cpp/build --config Release -j$(nproc) \
   --target llama-server llama-bench llama-cli
 
-# Arrancar servidor
-./start-server.sh                        # modelo por defecto
-./start-server.sh models/<nombre>.gguf  # modelo específico
+# Start server
+./start-server.sh                        # default model
+./start-server.sh models/<name>.gguf    # specific model
 ```
 
 ## Stack
 
-- **Backend**: llama.cpp compilado con `GGML_SYCL=ON` + compilador Intel `icx/icpx` (oneAPI)
-- **Servidor**: `llama-server` — API OpenAI-compatible en `localhost:8080`
-- **Sin Docker** — instalación nativa
-- **Modelos**: GGUFs de Hugging Face (bartowski, unsloth, lmstudio-community)
+- **Backend**: llama.cpp compiled with `GGML_SYCL=ON` + Intel compiler `icx/icpx` (oneAPI)
+- **Server**: `llama-server` — OpenAI-compatible API at `localhost:8080`
+- **No Docker** — native installation
+- **Models**: GGUFs from Hugging Face (bartowski, unsloth, lmstudio-community)
 
-## Estado
+## Status
 
-Proyecto en bootstrap — compilación y validación pendientes.
+Project in bootstrap — compilation and validation pending.
 
-## Notas de desarrollo
+## Development notes
 
-- Los paquetes oneAPI del compilador usan `apt.repos.intel.com/oneapi` — distinto del repo de GPU drivers (`repositories.intel.com/gpu`) que no funciona con Xe2
-- `sycl-ls` es el primer diagnóstico: si no muestra el Arc 140V, el problema es Level Zero runtime, no el compilador
+- oneAPI compiler packages use `apt.repos.intel.com/oneapi` — different from the GPU driver repo (`repositories.intel.com/gpu`) which does not work with Xe2
+- `sycl-ls` is the first diagnostic: if it does not show the Arc 140V, the problem is the Level Zero runtime, not the compiler
