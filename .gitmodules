@@ -1,0 +1,3 @@
+[submodule "ipex-llm"]
+	path = ipex-llm
+	url = git@github.com:jmsirvent/ipex-llm-arc.git
