@@ -138,7 +138,7 @@ ls /dev/dri/
 
 ---
 
-## 4. oneAPI — SYCL compiler and Intel MKL ⚠️
+## 4. oneAPI — SYCL compiler and Intel MKL ✅
 
 > **Architecture note:** the `apt.repos.intel.com/oneapi` repository (compiler + MKL) is **separate** from the GPU driver repository that does not work with Xe2. The oneAPI compiler packages do work on Ubuntu 24.04 Noble.
 
@@ -170,11 +170,11 @@ source /opt/intel/oneapi/setvars.sh
 icx --version
 # Intel(R) oneAPI DPC++/C++ Compiler ...
 
-# Verify that sycl-ls detects the Arc 140V
+# Verify that sycl-ls detects the Arc GPU
 sycl-ls
 # Expected (among others):
-# [opencl:gpu][opencl:0] Intel(R) OpenCL Graphics, Intel(R) Arc(TM) 140V Graphics ...
-# [level_zero:gpu][level_zero:0] Intel(R) Level-Zero, Intel(R) Arc(TM) 140V Graphics ...
+# [level_zero:gpu][level_zero:0] Intel(R) oneAPI Unified Runtime over Level-Zero V2, Intel(R) Arc(TM) Graphics ...
+# [opencl:gpu][opencl:1] Intel(R) OpenCL Graphics, Intel(R) Arc(TM) Graphics OpenCL 3.0 NEO ...
 ```
 
 > ⚠️ **If `sycl-ls` does not show the Arc 140V:** the problem is the Level Zero runtime (§3), not the compiler. Verify that `clinfo -l` shows the GPU before continuing.
