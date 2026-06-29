@@ -153,11 +153,15 @@ echo "deb [signed-by=/usr/share/keyrings/oneapi-archive-keyring.gpg] \
 
 sudo apt update
 
-# Install SYCL compiler (icx/icpx) + MKL
+# Find the latest available version (Intel does not maintain unversioned metapackages reliably)
+apt-cache search intel-oneapi-dpcpp-cpp | sort -V | tail -5
+# e.g.: intel-oneapi-dpcpp-cpp-2026.0
+
+# Install SYCL compiler (icx/icpx) + MKL — use the versioned package names from the search above
 sudo apt install -y \
-  intel-oneapi-dpcpp-cpp \
-  intel-oneapi-mkl \
-  intel-oneapi-mkl-devel
+  intel-oneapi-dpcpp-cpp-2026.0 \
+  intel-oneapi-mkl-2026.0 \
+  intel-oneapi-mkl-devel-2026.0
 
 # Verify installation
 source /opt/intel/oneapi/setvars.sh
