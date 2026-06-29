@@ -35,4 +35,4 @@ xpu-smi stats -d 0                        # point-in-time: frequency, temperatur
 
 ## GPU driver install
 
-Use `ppa:ubuntu-oem/intel-graphics-preview`. The official Intel repo (`repositories.intel.com`) does not work for Xe2/Lunar Lake on Ubuntu 24.04.
+Use `ppa:kobuk-team/intel-graphics` (successor to the discontinued `ubuntu-oem/intel-graphics-preview`). The official Intel repo (`repositories.intel.com`) provides Level Zero 1.21.x — too old for Xe2/Lunar Lake.

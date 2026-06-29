@@ -14,7 +14,7 @@ Projects inherit these instructions; each has its own CLAUDE.md for stack-specif
 
 - **Kernel driver**: `xe` (NOT `i915` — Xe2 uses a different driver)
 - **Compute stack**: Level Zero → SYCL (oneAPI) — same stack across all projects
-- **GPU drivers**: use `ppa:ubuntu-oem/intel-graphics-preview` (the official Intel repo `repositories.intel.com` does NOT work for Xe2/Lunar Lake on Ubuntu 24.04)
+- **GPU drivers**: use `ppa:kobuk-team/intel-graphics` (successor to the discontinued `ubuntu-oem/intel-graphics-preview`; `repositories.intel.com` provides Level Zero 1.21.x — too old for Xe2)
 
 ## GPU monitoring
 

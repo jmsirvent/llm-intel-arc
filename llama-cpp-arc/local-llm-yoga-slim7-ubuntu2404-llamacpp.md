@@ -106,12 +106,13 @@ sudo apt install -y \
 This step installs the Level Zero userspace libraries on the Ubuntu 24.04 host.
 These are what allow the SYCL runtime to communicate with the kernel's `xe` driver.
 
-> **Validated method for Lunar Lake (Xe2):** the official Intel repository (`repositories.intel.com/gpu/ubuntu noble`) **does not include** updated packages for Xe2. The only working method is the **Canonical Intel Graphics Preview PPA**, maintained in collaboration with Intel:
-> [`https://github.com/canonical/intel-graphics-preview`](https://github.com/canonical/intel-graphics-preview)
+> **Validated method for Lunar Lake (Xe2):** the official Intel repository (`repositories.intel.com/gpu/ubuntu noble`) provides older Level Zero versions (1.21.x). The working method is the **Canonical kobuk-team Intel Graphics PPA**, the current successor to the discontinued `ubuntu-oem/intel-graphics-preview` PPA:
+> [`https://launchpad.net/~kobuk-team/+archive/ubuntu/intel-graphics`](https://launchpad.net/~kobuk-team/+archive/ubuntu/intel-graphics)
 
 ```bash
-# Add the Canonical Intel Graphics Preview PPA
-sudo add-apt-repository ppa:ubuntu-oem/intel-graphics-preview
+# Add the Canonical kobuk-team Intel Graphics PPA
+# (successor to the discontinued ppa:ubuntu-oem/intel-graphics-preview)
+sudo add-apt-repository ppa:kobuk-team/intel-graphics
 sudo apt update
 
 # Install compute runtime with Xe2 / Lunar Lake support
@@ -127,13 +128,13 @@ sudo apt install -y \
 clinfo -l
 # Expected:
 # Platform #0: Intel(R) OpenCL Graphics
-#  -- Device #0: Intel(R) Arc(TM) 140V Graphics
+#  -- Device #0: Intel(R) Arc(TM) Graphics
 
 ls /dev/dri/
 # card1  renderD128
 ```
 
-> **Why the PPA:** the `repositories.intel.com/gpu/ubuntu noble` repository exists but does not contain versions compatible with Xe2/Lunar Lake for Ubuntu 24.04 Noble. The `ubuntu-oem/intel-graphics-preview` PPA is the official Intel+Canonical channel for recent hardware. It is the same repo used in the previous IPEX-LLM stack.
+> **Why the PPA:** `repositories.intel.com/gpu/ubuntu noble` provides Level Zero 1.21.x — too old for Xe2/Lunar Lake. The `kobuk-team/intel-graphics` PPA (Canonical team maintaining Intel graphics support in Ubuntu) provides 1.28.x, which is what was validated on this hardware.
 
 ---
 
