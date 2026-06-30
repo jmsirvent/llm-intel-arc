@@ -356,11 +356,15 @@ Always use verified publishers: **bartowski**, **unsloth**, **lmstudio-community
 | Gemma-3-12B-IT | Q4\_K\_M | 7.3 GB | 6.79 GiB | General / vision | bartowski/google\_gemma-3-12b-it-GGUF | **7.84** |
 | Qwen2.5-Coder-14B-Instruct | Q4\_K\_M | 9.0 GB | 8.37 GiB | Agentic coding (Cline) | bartowski | **9.92** |
 | Qwen3-14B *(optional)* | Q4\_K\_M | 9.0 GB | 8.38 GiB | Deep reasoning (slower) | unsloth | **10.09** |
+| Gemma-4-12B-IT *(pending)* | Q4\_K\_M | 7.7 GB | — | Vision / reasoning / audio | bartowski/gemma-4-12b-it-GGUF | — |
+| Gemma-4-E4B-IT *(pending)* | Q4\_K\_M | 5.0 GB | — | Compact vision / multimodal | unsloth/gemma-4-e4b-it-GGUF | — |
 
 > RAM column: memory allocated by llama.cpp SYCL during `llama-bench` (`-p 512 -n 128 -ngl 999`).
 > Full benchmark results and IPEX-LLM comparison: §8.3.
 > Qwen3-14B: same speed as the 14B coders but double the RAM of Qwen3-8B — only worth it when reasoning depth matters more than throughput.
 > Gemma-3: the Ollama blob is incompatible with llama.cpp ≥ build 86b94708 — use `bartowski/google_gemma-3-12b-it-GGUF`.
+> Gemma-4-12B: replaces Gemma-3-12B — same size class, adds 256K context, audio/video, configurable thinking mode. Repo naming differs from Gemma 3: `bartowski/gemma-4-12b-it-GGUF` (no `google_` prefix). Also download `mtp-gemma-4-12B-it-Q4_0.gguf` (323 MB) for MTP speculative decoding (~8 GiB total vs 12.7 GiB with a separate draft model).
+> Gemma-4-E4B: MatFormer architecture (4B active params from larger base) — not compatible as speculative decoding draft for the 12B (different tokenizer). Standalone multimodal model; pending evaluation as replacement or complement for vision workloads.
 
 ### 7.2 Ornith-1.0-9B — specific configuration
 
