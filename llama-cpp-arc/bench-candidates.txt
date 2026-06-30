@@ -1,0 +1,16 @@
+=== Qwen2.5-Coder-7B-Instruct-Q4_K_M.gguf ===
+| model                          |       size |     params | backend    | ngl |            test |                  t/s |
+| ------------------------------ | ---------: | ---------: | ---------- | --: | --------------: | -------------------: |
+| qwen2 7B Q4_K - Medium         |   4.36 GiB |     7.62 B | SYCL       | 999 |           pp512 |        478.68 ± 2.29 |
+| qwen2 7B Q4_K - Medium         |   4.36 GiB |     7.62 B | SYCL       | 999 |           tg128 |         19.42 ± 0.41 |
+
+build: 86b94708f (9843)
+
+=== Qwen3-14B-Q4_K_M.gguf ===
+| model                          |       size |     params | backend    | ngl |            test |                  t/s |
+| ------------------------------ | ---------: | ---------: | ---------- | --: | --------------: | -------------------: |
+| qwen3 14B Q4_K - Medium        |   8.38 GiB |    14.77 B | SYCL       | 999 |           pp512 |        225.17 ± 1.21 |
+| qwen3 14B Q4_K - Medium        |   8.38 GiB |    14.77 B | SYCL       | 999 |           tg128 |         10.09 ± 0.10 |
+
+build: 86b94708f (9843)
+

@@ -62,9 +62,20 @@ source /opt/intel/oneapi/setvars.sh
 curl http://localhost:8080/health
 ```
 
-## Performance baseline — reference to beat
+## Performance — llama.cpp SYCL (Arc 140V, `-p 512 -n 128 -ngl 999`, no Flash Attention)
 
-Measured with IPEX-LLM + Flash Attention on the same hardware, Q4\_K\_M, CTX=8192:
+| Model | Quant | Gen tok/s | Prefill tok/s |
+|---|---|---|---|
+| phi4-mini | Q4\_K\_M | **33.97** | **819** |
+| qwen2.5-coder-7b | Q4\_K\_M | **19.42** | **479** |
+| llama3.1-8b-instruct | Q4\_K\_M | **18.87** | **358** |
+| qwen3-8b | Q4\_K\_M | **15.25** | **323** |
+| ornith-1.0-9b | Q6\_K | **10.20** | **330** |
+| qwen3-14b *(optional)* | Q4\_K\_M | **10.09** | **225** |
+| qwen2.5-coder-14b | Q4\_K\_M | **9.92** | **227** |
+| gemma3-12b | Q4\_K\_M | **7.84** | **211** |
+
+## IPEX-LLM baseline (previous stack, Flash Attention on, Q4\_K\_M)
 
 | Model | Gen tok/s | Prefill tok/s | TTFT ms |
 |---|---|---|---|

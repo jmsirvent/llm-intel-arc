@@ -16,6 +16,7 @@
 6. [llama-server — configuration and startup](#6-llama-server--configuration-and-startup)
 7. [Recommended models](#7-recommended-models)
 8. [Model management and benchmarking](#8-model-management-and-benchmarking)
+   - [8.4 Speculative decoding](#84-speculative-decoding)
 9. [Integration with external tools](#9-integration-with-external-tools)
 10. [Systemd service (autostart)](#10-systemd-service-autostart)
 11. [OS tuning for performance](#11-os-tuning-for-performance)
@@ -307,7 +308,7 @@ export SYCL_CACHE_PERSISTENT=0  # workaround intel/llvm#21972 — see TODO.md
 export ZES_ENABLE_SYSMAN=1
 
 # Default model (pass as argument to override)
-MODEL="${1:-${MODELS_DIR}/qwen2.5-coder-14b-instruct-q4_k_m.gguf}"
+MODEL="${1:-${MODELS_DIR}/llama3.1-8b-instruct-q4_k_m.gguf}"
 
 exec "${LLAMACPP_DIR}/build/bin/llama-server" \
   -m "${MODEL}" \
@@ -328,7 +329,7 @@ chmod +x ~/llm/llama-cpp-arc/start-server.sh
 
 ---
 
-## 7. Recommended models ⚠️
+## 7. Recommended models ✅
 
 ### Memory budget
 
@@ -345,18 +346,21 @@ chmod +x ~/llm/llama-cpp-arc/start-server.sh
 
 Always use verified publishers: **bartowski**, **unsloth**, **lmstudio-community**. Do not use unknown publishers.
 
-| Model | Quant | Disk size | Role | HF source | IPEX-LLM baseline |
-|---|---|---|---|---|---|
-| Qwen2.5-Coder-14B-Instruct | Q4\_K\_M | ~9.0 GB | Agentic coding (Cline) | bartowski | — |
-| Qwen2.5-14B-Instruct | Q4\_K\_M | ~9.0 GB | General / instruction | bartowski | 10.7 tok/s gen |
-| Qwen3-8B | Q4\_K\_M | ~5.2 GB | Reasoning / long context | unsloth | 18.1 tok/s gen |
-| Llama-3.1-8B-Instruct | Q4\_K\_M | ~4.9 GB | Fast general purpose | bartowski | 18.9 tok/s gen |
-| Gemma-3-12B-IT | Q4\_K\_M | ~8.1 GB | General / vision | bartowski | 10.5 tok/s gen |
-| Phi-4-mini-Instruct | Q4\_K\_M | ~2.5 GB | FIM autocomplete (Twinny) | bartowski | — |
-| Ornith-1.0-9B | Q6\_K | ~7.4 GB | Agentic coding / tool-calling | deepreinforce-ai | — |
+| Model | Quant | GGUF size | RAM (bench) | Role | HF repo | Gen tok/s |
+|---|---|---|---|---|---|---|
+| Phi-4-mini-Instruct | Q4\_K\_M | 2.5 GB | 2.31 GiB | FIM autocomplete (Twinny) | bartowski | **33.97** |
+| Qwen2.5-Coder-7B-Instruct | Q4\_K\_M | 4.7 GB | 4.36 GiB | Fast coding / autocomplete | bartowski | **19.42** |
+| Llama-3.1-8B-Instruct | Q4\_K\_M | 4.9 GB | 4.58 GiB | Fast general purpose | bartowski | **18.87** |
+| Qwen3-8B | Q4\_K\_M | 5.2 GB | 4.86 GiB | Reasoning / long context | unsloth | **15.25** |
+| Ornith-1.0-9B | Q6\_K | 7.4 GB | 6.84 GiB | Agentic coding / tool-calling | deepreinforce-ai/Ornith-1.0-9B-GGUF | **10.20** |
+| Gemma-3-12B-IT | Q4\_K\_M | 7.3 GB | 6.79 GiB | General / vision | bartowski/google\_gemma-3-12b-it-GGUF | **7.84** |
+| Qwen2.5-Coder-14B-Instruct | Q4\_K\_M | 9.0 GB | 8.37 GiB | Agentic coding (Cline) | bartowski | **9.92** |
+| Qwen3-14B *(optional)* | Q4\_K\_M | 9.0 GB | 8.38 GiB | Deep reasoning (slower) | unsloth | **10.09** |
 
-> Runtime RAM values with llama.cpp SYCL **are pending measurement**. As a reference, IPEX-LLM with Flash Attention used ~40% less than the on-disk model size.
-> IPEX-LLM baseline figures: Q4\_K\_M, CTX=8192, Flash Attention enabled — same hardware.
+> RAM column: memory allocated by llama.cpp SYCL during `llama-bench` (`-p 512 -n 128 -ngl 999`).
+> Full benchmark results and IPEX-LLM comparison: §8.3.
+> Qwen3-14B: same speed as the 14B coders but double the RAM of Qwen3-8B — only worth it when reasoning depth matters more than throughput.
+> Gemma-3: the Ollama blob is incompatible with llama.cpp ≥ build 86b94708 — use `bartowski/google_gemma-3-12b-it-GGUF`.
 
 ### 7.2 Ornith-1.0-9B — specific configuration
 
@@ -367,8 +371,7 @@ Ornith-1.0-9B ([GGUF repo](https://huggingface.co/deepreinforce-ai/Ornith-1.0-9B
 **Download:**
 
 ```bash
-huggingface-cli download deepreinforce-ai/Ornith-1.0-9B-GGUF \
-  --include "ornith-1.0-9b-q6_k.gguf" \
+hf download deepreinforce-ai/Ornith-1.0-9B-GGUF ornith-1.0-9b-Q6_K.gguf \
   --local-dir ~/llm/llama-cpp-arc/models/
 ```
 
@@ -376,7 +379,7 @@ huggingface-cli download deepreinforce-ai/Ornith-1.0-9B-GGUF \
 
 ```bash
 ./build/bin/llama-server \
-  -m models/ornith-1.0-9b-q6_k.gguf \
+  -m models/ornith-1.0-9b-Q6_K.gguf \
   --port 8080 \
   --host 0.0.0.0 \
   --n-gpu-layers 999 \
@@ -402,20 +405,21 @@ huggingface-cli download deepreinforce-ai/Ornith-1.0-9B-GGUF \
 ### 7.3 Downloading models
 
 ```bash
-# Install huggingface-cli
-pip install --user huggingface-hub
+# Install hf (huggingface_hub CLI — huggingface-cli is deprecated as of v1.21.0)
+pip install --user --upgrade huggingface_hub
 
 mkdir -p ~/llm/llama-cpp-arc/models
 
-# Download a specific model (example: Qwen2.5-Coder-14B Q4_K_M)
-huggingface-cli download \
-  bartowski/Qwen2.5-Coder-14B-Instruct-GGUF \
+# List files in a repo before downloading
+hf download <repo_id> --dry-run
+
+# Download a specific file — filename goes as positional argument (exact case matters)
+hf download bartowski/Qwen2.5-Coder-14B-Instruct-GGUF \
   Qwen2.5-Coder-14B-Instruct-Q4_K_M.gguf \
   --local-dir ~/llm/llama-cpp-arc/models
 
 # Download Qwen3-8B
-huggingface-cli download \
-  unsloth/Qwen3-8B-GGUF \
+hf download unsloth/Qwen3-8B-GGUF \
   Qwen3-8B-Q4_K_M.gguf \
   --local-dir ~/llm/llama-cpp-arc/models
 ```
@@ -478,22 +482,51 @@ watch -n1 'grep -E "MemFree|MemAvailable" /proc/meminfo'
 ### 8.3 Benchmark with llama-bench
 
 ```bash
-# Basic benchmark: prefill and generation
+# Basic benchmark: prefill (512 tokens) + generation (128 tokens)
 ./build/bin/llama-bench \
   -m models/qwen3-8b-q4_k_m.gguf \
-  -n 128 \
-  -ngl 999
+  -p 512 -n 128 \
+  -ngl 999 \
+  --output md
 
 # Useful options:
-# -n <tokens>       tokens to generate
-# -p <tokens>       prompt tokens (prefill)
-# -ngl <layers>     GPU layers (999 = all)
-# -t <threads>      CPU threads (relevant only if some layers run on CPU)
+# -p <tokens>       prompt tokens for prefill test (default: 512)
+# -n <tokens>       tokens to generate (default: 128)
+# -ngl <layers>     GPU layers (999 = all on GPU)
+# --output md       Markdown table output, ready to paste into docs
+# Note: no -c flag — context size = -p + -n, no pre-allocation needed
 ```
 
-> llama-bench results will be added to this document once validated on the Arc 140V.
+**llama-bench results — llama.cpp SYCL (Arc 140V, `-p 512 -n 128 -ngl 999`):**
 
-**Baseline reference — IPEX-LLM (same models Q4\_K\_M, Arc 140V, CTX=8192):**
+> ⚠️ Run sequentially in a loop. The `xe` driver retains GPU memory pages between model loads —
+> run gemma3 in isolation (fresh terminal or after `echo 3 > /proc/sys/vm/drop_caches`) to avoid OOM.
+
+| Model | Quant | Size | Gen tok/s | Prefill tok/s | vs IPEX-LLM gen | vs IPEX-LLM prefill |
+|---|---|---|---|---|---|---|
+| phi4-mini | Q4\_K\_M | 2.31 GiB | **33.97** | **819** | — ² | — ² |
+| qwen2.5-coder-7b | Q4\_K\_M | 4.36 GiB | **19.42** | **479** | ≈ (−3%) | — ⁴ |
+| llama3.1-8b-instruct | Q4\_K\_M | 4.58 GiB | **18.87** | **358** | ≈ (−0%) | −17% ¹ |
+| qwen3-8b | Q4\_K\_M | 4.86 GiB | **15.25** | **323** | −16% | −38% ¹ |
+| ornith-1.0-9b | Q6\_K | 6.84 GiB | **10.20** | **330** | — ² | — ² |
+| qwen3-14b *(optional)* | Q4\_K\_M | 8.38 GiB | **10.09** | **225** | — ² | — ² |
+| qwen2.5-coder-14b | Q4\_K\_M | 8.37 GiB | **9.92** | **227** | — ³ | — ³ |
+| gemma3-12b | Q4\_K\_M | 6.79 GiB | **7.84** | **211** | −25% | −12% |
+
+> ¹ IPEX-LLM had Flash Attention enabled, which mainly accelerates prefill (O(n²) → O(n) attention).
+> Generation speed is a fairer comparison — llama3.1 is virtually identical (18.87 vs 18.9 tok/s).
+> llama.cpp SYCL also supports FA (`-fa on`); not yet validated on Arc 140V.
+>
+> ² No IPEX-LLM baseline for this model.
+>
+> ³ IPEX-LLM baseline used qwen2.5-coder **7B**; the table above benchmarks the **14B** variant — not directly comparable.
+>
+> ⁴ IPEX-LLM baseline for qwen2.5-coder:7b was 20.0 tok/s gen (with FA) — llama.cpp reaches 19.42 tok/s without FA, effectively equivalent.
+>
+> Note: gemma3 Ollama blob is incompatible with llama.cpp ≥ 86b94708 (missing metadata key
+> `gemma3.attention.layer_norm_rms_epsilon`). Use `bartowski/google_gemma-3-12b-it-GGUF` instead.
+
+**Baseline reference — IPEX-LLM (Q4\_K\_M, Arc 140V, CTX=8192, Flash Attention on):**
 
 | Model | Gen tok/s | Prefill tok/s | TTFT ms |
 |---|---|---|---|
@@ -502,6 +535,62 @@ watch -n1 'grep -E "MemFree|MemAvailable" /proc/meminfo'
 | llama3.1:8b-instruct | 18.9 | 429 | 56 ms |
 | gemma3:12b | 10.5 | 240 | 100 ms |
 | qwen2.5:14b-instruct | 10.7 | 451 | 100 ms |
+
+### 8.4 Speculative decoding ⚠️
+
+Speculative decoding uses a small "draft" model to generate candidate tokens, which a larger "target" model then verifies in a single forward pass. When the draft's predictions are correct, multiple tokens are confirmed at once — multiplying generation throughput without changing output quality.
+
+**Requirement:** draft and target must share the same tokenizer and vocabulary (same architecture family).
+
+**Compatible pairs from the current lineup:**
+
+| Draft | Target | Architecture | Combined VRAM | Expected speedup |
+|---|---|---|---|---|
+| Qwen2.5-Coder-7B (4.36 GiB) | Qwen2.5-Coder-14B (8.37 GiB) | Qwen2 | 12.7 GiB | **1.5–2×** (coding) |
+| Qwen3-8B (4.86 GiB) | Qwen3-14B *(optional)* (8.38 GiB) | Qwen3 | 13.2 GiB | 1.3–1.8× |
+
+Both pairs fit within the ~20 GB available pool including KV cache overhead.
+
+> **Why coding benefits most:** code generation has higher token predictability (indentation, keywords, variable names) → draft acceptance rates of 60–80% → more tokens confirmed per verification step.
+> The Qwen3 pair activates the only concrete use case for the "optional" Qwen3-14B — as speculative decoding target it justifies the RAM overhead.
+
+**Starting the server with speculative decoding:**
+
+```bash
+cd ~/llm/llama-cpp-arc/llama.cpp
+
+./build/bin/llama-server \
+  -m ../models/Qwen2.5-Coder-14B-Instruct-Q4_K_M.gguf \
+  --draft-model ../models/Qwen2.5-Coder-7B-Instruct-Q4_K_M.gguf \
+  --draft-max 8 \
+  -ngl 999 \
+  --port 8080
+```
+
+| Parameter | Description |
+|---|---|
+| `--draft-model` | Path to the draft (small) model |
+| `--draft-max` | Max speculative tokens per step — start with 8, tune based on acceptance rate |
+
+**Benchmarking speculative decoding vs baseline:**
+
+```bash
+# Baseline (no draft)
+./build/bin/llama-bench \
+  -m ../models/Qwen2.5-Coder-14B-Instruct-Q4_K_M.gguf \
+  -p 512 -n 128 -ngl 999 --output md
+
+# With speculative decoding
+./build/bin/llama-bench \
+  -m ../models/Qwen2.5-Coder-14B-Instruct-Q4_K_M.gguf \
+  --draft-model ../models/Qwen2.5-Coder-7B-Instruct-Q4_K_M.gguf \
+  --draft-max 8 \
+  -p 512 -n 128 -ngl 999 --output md
+```
+
+Compare the `tg128` result against the 9.92 tok/s baseline from §8.3. The bench output includes draft acceptance metrics.
+
+> **Tuning `--draft-max`:** higher values increase potential speedup but waste work on rejected tokens. 8 is a safe default; try 4–16 to find the value that maximises effective tok/s. When running as a server, the `/metrics` endpoint reports the live acceptance rate.
 
 ---
 

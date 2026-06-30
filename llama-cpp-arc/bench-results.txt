@@ -1,0 +1,56 @@
+=== llama3.1-8b-instruct-q4_k_m.gguf ===
+
+=== qwen3-8b-q4_k_m.gguf ===
+
+=== qwen2.5-coder-14b-q4_k_m.gguf ===
+
+=== gemma3-12b-q4_k_m.gguf ===
+
+=== phi4-mini-q4_k_m.gguf ===
+
+=== ornith-1.0-9b-Q6_K.gguf ===
+
+=== llama3.1-8b-instruct-q4_k_m.gguf ===
+| model                          |       size |     params | backend    | ngl |            test |                  t/s |
+| ------------------------------ | ---------: | ---------: | ---------- | --: | --------------: | -------------------: |
+| llama 8B Q4_K - Medium         |   4.58 GiB |     8.03 B | SYCL       | 999 |           pp512 |       358.02 ± 19.19 |
+| llama 8B Q4_K - Medium         |   4.58 GiB |     8.03 B | SYCL       | 999 |           tg128 |         18.87 ± 0.15 |
+
+build: 86b94708f (9843)
+
+=== qwen3-8b-q4_k_m.gguf ===
+| model                          |       size |     params | backend    | ngl |            test |                  t/s |
+| ------------------------------ | ---------: | ---------: | ---------- | --: | --------------: | -------------------: |
+| qwen3 8B Q4_K - Medium         |   4.86 GiB |     8.19 B | SYCL       | 999 |           pp512 |        323.03 ± 6.62 |
+| qwen3 8B Q4_K - Medium         |   4.86 GiB |     8.19 B | SYCL       | 999 |           tg128 |         15.25 ± 0.17 |
+
+build: 86b94708f (9843)
+
+=== qwen2.5-coder-14b-q4_k_m.gguf ===
+| model                          |       size |     params | backend    | ngl |            test |                  t/s |
+| ------------------------------ | ---------: | ---------: | ---------- | --: | --------------: | -------------------: |
+| qwen2 14B Q4_K - Medium        |   8.37 GiB |    14.77 B | SYCL       | 999 |           pp512 |       226.80 ± 10.58 |
+| qwen2 14B Q4_K - Medium        |   8.37 GiB |    14.77 B | SYCL       | 999 |           tg128 |          9.92 ± 0.40 |
+
+build: 86b94708f (9843)
+
+=== gemma3-12b-q4_k_m.gguf ===
+| model                          |       size |     params | backend    | ngl |            test |                  t/s |
+| ------------------------------ | ---------: | ---------: | ---------- | --: | --------------: | -------------------: |
+
+=== phi4-mini-q4_k_m.gguf ===
+| model                          |       size |     params | backend    | ngl |            test |                  t/s |
+| ------------------------------ | ---------: | ---------: | ---------- | --: | --------------: | -------------------: |
+| phi3 3B Q4_K - Medium          |   2.31 GiB |     3.84 B | SYCL       | 999 |           pp512 |        818.91 ± 2.85 |
+| phi3 3B Q4_K - Medium          |   2.31 GiB |     3.84 B | SYCL       | 999 |           tg128 |         33.97 ± 0.52 |
+
+build: 86b94708f (9843)
+
+=== ornith-1.0-9b-Q6_K.gguf ===
+| model                          |       size |     params | backend    | ngl |            test |                  t/s |
+| ------------------------------ | ---------: | ---------: | ---------- | --: | --------------: | -------------------: |
+| qwen35 9B Q6_K                 |   6.84 GiB |     8.95 B | SYCL       | 999 |           pp512 |        329.82 ± 0.68 |
+| qwen35 9B Q6_K                 |   6.84 GiB |     8.95 B | SYCL       | 999 |           tg128 |         10.20 ± 0.09 |
+
+build: 86b94708f (9843)
+
