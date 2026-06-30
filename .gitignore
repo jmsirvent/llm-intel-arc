@@ -15,6 +15,9 @@ build/
 *.a
 *.gguf
 
+# Cloned repos and build artifacts
+llama-cpp-arc/llama.cpp/
+
 # Logs and temp
 *.log
 *.tmp

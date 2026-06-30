@@ -96,6 +96,7 @@ sudo apt install -y \
   git cmake ninja-build \
   pkg-config \
   libgomp1 \
+  libssl-dev \
   python3-pip
 ```
 
@@ -119,6 +120,7 @@ sudo apt update
 sudo apt install -y \
   libze-intel-gpu1 \
   libze1 \
+  libze-dev \
   intel-opencl-icd \
   intel-level-zero-gpu \
   level-zero \
@@ -183,7 +185,7 @@ sycl-ls
 
 ---
 
-## 5. Building llama.cpp with SYCL backend ⚠️
+## 5. Building llama.cpp with SYCL backend ✅
 
 ```bash
 # Clone llama.cpp
@@ -206,18 +208,25 @@ cmake --build build --config Release -j$(nproc) \
 
 # Verify the binary detects the GPU
 ./build/bin/llama-server --list-devices
-# Should list Intel Arc 140V as an available device
 ```
 
-> **`DGGML_SYCL_F16=ON`**: enables FP16 operations in the SYCL backend. Reduces memory usage and can improve throughput on hardware with native FP16 support such as the Arc 140V Xe2. Real impact on this hardware is pending verification.
+Expected output:
+```
+Available devices:
+  SYCL0: Intel(R) Arc(TM) Graphics (29283 MiB, 6959 MiB free)
+```
 
-> **Build time:** compiling with icx/icpx takes longer than with gcc/clang due to the depth of SYCL optimizations. Expect 5–15 minutes depending on the number of available cores.
+> **29283 MiB total (~28.6 GB):** the `xe` driver exposes almost all unified RAM as the GPU pool — expected on Lunar Lake. Free memory varies with OS load; ~7–12 GB free in daily desktop use.
 
-> **`nproc`**: uses all available cores. On the Core Ultra 7 258V (8 cores), `-j8` is equivalent. You can reduce to `-j4` if you need to use the machine during the build.
+> **`DGGML_SYCL_F16=ON`**: enables FP16 operations in the SYCL backend. Reduces memory usage and can improve throughput on hardware with native FP16 support such as the Arc 140V Xe2.
+
+> **Build time:** compiling with icx/icpx takes longer than with gcc/clang due to the depth of SYCL optimizations. Expect 5–15 minutes on the Core Ultra 7 258V (8 cores).
+
+> **Expected warnings during build:** 3 warnings in `ggml-sycl.cpp` about unused variables (`use_mkl_direct`, `last_str`, `type_size_src0`) — upstream code, harmless, build is correct if it reaches `[100%] Built target llama-cli`.
 
 ---
 
-## 6. llama-server — configuration and startup ⚠️
+## 6. llama-server — configuration and startup ✅
 
 ### 6.1 SYCL environment variables
 
@@ -228,8 +237,12 @@ source /opt/intel/oneapi/setvars.sh
 # Select the Arc 140V (first Level Zero device)
 export GGML_SYCL_DEVICE=0
 
-# Persistent cache of compiled SYCL kernels (avoids recompilation on each startup)
-export SYCL_CACHE_PERSISTENT=1
+# Persistent SYCL kernel cache disabled — workaround for intel/llvm#21972:
+# getSortedImages() calls strcmp() on a NULL GetName() from dynamically-linked kernels,
+# causing SIGSEGV on first dispatch. Affects oneAPI ≥ 2025.3 (libsycl.so.9).
+# Cost: 2–5 min JIT recompilation on each cold start. Inference speed unaffected.
+# See: llama-cpp-arc/TODO.md — re-enable to SYCL_CACHE_PERSISTENT=1 once Intel fixes it.
+export SYCL_CACHE_PERSISTENT=0
 
 # Allows the runtime to query GPU metrics
 export ZES_ENABLE_SYSMAN=1
@@ -241,17 +254,22 @@ export ZES_ENABLE_SYSMAN=1
 cd ~/llm/llama-cpp-arc/llama.cpp
 
 ./build/bin/llama-server \
-  -m models/qwen2.5-coder-14b-instruct-q4_k_m.gguf \
+  -m ../models/llama3.1-8b-instruct-q4_k_m.gguf \
   --port 8080 \
   --host 0.0.0.0 \
   --n-gpu-layers 999 \
   --ctx-size 8192 \
-  --parallel 1 \
-  --log-disable
+  --parallel 1
 
 # Verify the server responds
 curl http://localhost:8080/health
 # {"status":"ok"}
+
+# Test inference
+curl -s http://localhost:8080/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{"model":"local","messages":[{"role":"user","content":"Hello"}],"max_tokens":20}' \
+  | python3 -m json.tool
 ```
 
 | Parameter | Value | Description |
@@ -264,12 +282,9 @@ curl http://localhost:8080/health
 
 ### 6.3 First model load
 
-The first time a model is loaded, the SYCL runtime compiles the kernels for the specific hardware (Arc 140V Xe2). This takes **2–5 minutes** and is completely normal. The compiled kernels are cached in `~/.cache/sycl/` and subsequent loads are nearly instantaneous.
+Every startup compiles SYCL kernels JIT for the Arc 140V Xe2 — this takes **2–5 minutes** and is normal. The persistent kernel cache (`SYCL_CACHE_PERSISTENT=1`) is disabled due to a bug in oneAPI 2026.0 (`libsycl.so.9`) that causes a SIGSEGV in `PersistentDeviceCodeCache::getItemFromDisc`. Re-enable it once Intel ships a fix.
 
-```bash
-# Follow server logs during first load
-# The server prints SYCL compilation progress to stderr
-```
+> **Cache directories** (if re-enabling after a fix): `~/.cache/libsycl_cache/` and `~/.cache/neo_compiler_cache/` — these are the actual locations used by oneAPI 2026.0, not `~/.cache/sycl/`. Clear both if switching between oneAPI versions or after a kernel driver update.
 
 ### 6.4 Startup script
 
@@ -288,7 +303,7 @@ source /opt/intel/oneapi/setvars.sh --force
 
 # SYCL variables
 export GGML_SYCL_DEVICE=0
-export SYCL_CACHE_PERSISTENT=1
+export SYCL_CACHE_PERSISTENT=0  # workaround intel/llvm#21972 — see TODO.md
 export ZES_ENABLE_SYSMAN=1
 
 # Default model (pass as argument to override)
@@ -330,17 +345,61 @@ chmod +x ~/llm/llama-cpp-arc/start-server.sh
 
 Always use verified publishers: **bartowski**, **unsloth**, **lmstudio-community**. Do not use unknown publishers.
 
-| Model | Quant | Disk size | Role | HF source |
-|---|---|---|---|---|
-| Qwen2.5-Coder-14B-Instruct | Q4\_K\_M | ~9.0 GB | Agentic coding (Cline) | bartowski |
-| Qwen3-8B | Q4\_K\_M | ~5.2 GB | Reasoning / long context | unsloth |
-| Llama-3.1-8B-Instruct | Q4\_K\_M | ~4.9 GB | Fast general purpose | bartowski |
-| Gemma-3-12B-IT | Q4\_K\_M | ~8.1 GB | General / vision | bartowski |
-| Phi-4-mini-Instruct | Q4\_K\_M | ~2.5 GB | FIM autocomplete (Twinny) | bartowski |
+| Model | Quant | Disk size | Role | HF source | IPEX-LLM baseline |
+|---|---|---|---|---|---|
+| Qwen2.5-Coder-14B-Instruct | Q4\_K\_M | ~9.0 GB | Agentic coding (Cline) | bartowski | — |
+| Qwen2.5-14B-Instruct | Q4\_K\_M | ~9.0 GB | General / instruction | bartowski | 10.7 tok/s gen |
+| Qwen3-8B | Q4\_K\_M | ~5.2 GB | Reasoning / long context | unsloth | 18.1 tok/s gen |
+| Llama-3.1-8B-Instruct | Q4\_K\_M | ~4.9 GB | Fast general purpose | bartowski | 18.9 tok/s gen |
+| Gemma-3-12B-IT | Q4\_K\_M | ~8.1 GB | General / vision | bartowski | 10.5 tok/s gen |
+| Phi-4-mini-Instruct | Q4\_K\_M | ~2.5 GB | FIM autocomplete (Twinny) | bartowski | — |
+| Ornith-1.0-9B | Q6\_K | ~7.4 GB | Agentic coding / tool-calling | deepreinforce-ai | — |
 
 > Runtime RAM values with llama.cpp SYCL **are pending measurement**. As a reference, IPEX-LLM with Flash Attention used ~40% less than the on-disk model size.
+> IPEX-LLM baseline figures: Q4\_K\_M, CTX=8192, Flash Attention enabled — same hardware.
 
-### 7.2 Downloading models
+### 7.2 Ornith-1.0-9B — specific configuration
+
+Ornith-1.0-9B ([GGUF repo](https://huggingface.co/deepreinforce-ai/Ornith-1.0-9B-GGUF)) is a dense 9B model based on Qwen 3.5, post-trained for agentic coding (SWE-Bench, Terminal-Bench, NL2Repo). It uses internal `<think>` reasoning blocks before answering — expect higher TTFT than a standard 9B model.
+
+**Recommended quantization:** Q6\_K (7.36 GB) — fits comfortably in the ~20 GB available pool leaving headroom for context and OS. Q8\_0 (9.53 GB) is also viable.
+
+**Download:**
+
+```bash
+huggingface-cli download deepreinforce-ai/Ornith-1.0-9B-GGUF \
+  --include "ornith-1.0-9b-q6_k.gguf" \
+  --local-dir ~/llm/llama-cpp-arc/models/
+```
+
+**Start the server with the recommended sampling parameters:**
+
+```bash
+./build/bin/llama-server \
+  -m models/ornith-1.0-9b-q6_k.gguf \
+  --port 8080 \
+  --host 0.0.0.0 \
+  --n-gpu-layers 999 \
+  --ctx-size 32768 \
+  --parallel 1 \
+  --temp 0.6 \
+  --top-p 0.95 \
+  --top-k 20
+```
+
+> The 262K context window is supported by the model but loading it fully requires ~20 GB of KV cache. In daily use, 32768 tokens is a practical ceiling that keeps memory pressure manageable.
+
+**Available quantizations:**
+
+| Quant | Size | Notes |
+|---|---|---|
+| Q4\_K\_M | 5.63 GB | Minimum recommended |
+| Q5\_K\_M | 6.47 GB | Good quality/size balance |
+| Q6\_K | 7.36 GB | **Recommended** — near-lossless on 9B |
+| Q8\_0 | 9.53 GB | Near full precision |
+| BF16 | 17.9 GB | Leaves very little headroom |
+
+### 7.3 Downloading models
 
 ```bash
 # Install huggingface-cli

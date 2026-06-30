@@ -40,8 +40,8 @@ VS Code (Twinny / Cline / Roo Code) · Open WebUI · Python scripts
 |---|---|
 | Level Zero / xe driver | ✅ Validated (inherited from IPEX-LLM) |
 | oneAPI — icx/icpx + MKL | ✅ Validated |
-| llama.cpp SYCL build | ⏳ Pending |
-| llama-server validated on Arc 140V | ⏳ Pending |
+| llama.cpp SYCL build | ✅ Validated |
+| llama-server validated on Arc 140V | ✅ Validated |
 | Benchmarks vs IPEX-LLM | ⏳ Pending |
 | Speculative decoding | ⏳ Pending |
 
