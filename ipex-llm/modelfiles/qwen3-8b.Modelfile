@@ -1,0 +1,8 @@
+FROM qwen3:8b
+
+# NOTA: PARAMETER think no está soportado en IPEX-LLM.
+# Para desactivar el modo razonamiento, pasar en el payload de la API: "think": false
+# Para activarlo explícitamente en una petición: "think": true
+PARAMETER temperature 0.6
+# 16K por defecto: qwen3 brilla en tareas de contexto largo (RAG, análisis, código complejo)
+PARAMETER num_ctx 16384

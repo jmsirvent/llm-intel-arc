@@ -1,0 +1,37 @@
+# docker-compose.open-webui.yml — Open WebUI conectado a IPEX-LLM (Arc 140V)
+#
+# Prerequisito: el stack principal debe estar corriendo
+#   docker compose up -d
+#
+# Arranque:
+#   docker compose -f docker-compose.open-webui.yml up -d
+#
+# Parada:
+#   docker compose -f docker-compose.open-webui.yml down
+
+services:
+  open-webui:
+    image: ghcr.io/open-webui/open-webui:main
+    container_name: open-webui
+    restart: unless-stopped
+
+    ports:
+      - "3000:8080"
+
+    # Permite que el contenedor alcance localhost:11434 del host
+    extra_hosts:
+      - "host-gateway:host-gateway"
+
+    environment:
+      # Endpoint del IPEX-LLM Ollama en el host
+      OLLAMA_BASE_URL: "http://host-gateway:11434"
+
+      # Sin autenticación — acceso local únicamente
+      WEBUI_AUTH: "false"
+
+    volumes:
+      # Persistencia: conversaciones, configuración, modelos descargados via WebUI
+      - open-webui-data:/app/backend/data
+
+volumes:
+  open-webui-data:

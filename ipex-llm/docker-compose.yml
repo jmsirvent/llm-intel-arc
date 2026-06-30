@@ -1,0 +1,97 @@
+# docker-compose.yml — IPEX-LLM Ollama en Intel Arc 140V (Lunar Lake)
+# Ubuntu 24.04 · kernel 6.19 · driver xe
+
+services:
+  ipex-llm-ollama:
+    image: intelanalytics/ipex-llm-inference-cpp-xpu:latest
+    container_name: ipex-llm
+    restart: unless-stopped
+
+    # Passthrough completo del GPU Intel Arc
+    devices:
+      - /dev/dri:/dev/dri
+
+    ports:
+      - "11434:11434"
+
+    volumes:
+      # Persistencia de modelos en el host
+      - ~/.ollama/models:/root/.ollama/models
+      # Persistencia del caché SYCL compilado — evita recompilación de 2-5 min tras docker compose down/up
+      # neo_compiler_cache: kernels del driver NEO (Level Zero/OpenCL)
+      # libsycl_cache: programas compilados por el runtime SYCL
+      - ~/.cache/ipex-llm/neo_compiler_cache:/root/.cache/neo_compiler_cache
+      - ~/.cache/ipex-llm/libsycl_cache:/root/.cache/libsycl_cache
+
+    environment:
+      # Escuchar en todas las interfaces para que otras herramientas se conecten
+      OLLAMA_HOST: "0.0.0.0"
+
+      # Forzar todas las capas del modelo al GPU (sin split CPU/GPU)
+      OLLAMA_NUM_GPU: "999"
+
+      # Seleccionar el iGPU Arc 140V (level_zero:0 = primer dispositivo Level Zero)
+      ONEAPI_DEVICE_SELECTOR: "level_zero:0"
+
+      # Cache persistente de kernels SYCL compilados
+      # Evita la compilación de 2-5 min en cada reinicio del contenedor
+      SYCL_CACHE_PERSISTENT: "1"
+
+      # Permite que el runtime consulte métricas del GPU (uso, temperatura)
+      ZES_ENABLE_SYSMAN: "1"
+
+      # Optimización de rendimiento para Arc A-Series y Xe2 en Linux
+      SYCL_PI_LEVEL_ZERO_USE_IMMEDIATE_COMMANDLISTS: "1"
+
+      # Evitar que el contenedor use proxy para localhost
+      no_proxy: "localhost,127.0.0.1"
+
+      # Contexto por defecto: 8K para uso interactivo y coding (KV cache pequeño)
+      # Sube a 16K-32K por petición via num_ctx en el payload JSON para RAG/long-context
+      OLLAMA_NUM_CTX: "8192"
+
+      # Flash attention: reduce el KV cache ~30-50% con kernels optimizados
+      # En iGPU con RAM unificada es el cambio más impactante (VRAM = RAM de sistema)
+      OLLAMA_FLASH_ATTENTION: "1"
+
+      # Un solo modelo en VRAM a la vez (default Ollama: hasta 3)
+      # Libera VRAM inmediatamente al cambiar de modelo, sin fragmentación
+      OLLAMA_MAX_LOADED_MODELS: "1"
+
+      # Single-user explícito: evita reservar buffers para peticiones paralelas
+      OLLAMA_NUM_PARALLEL: "1"
+
+      # Mantener modelo caliente 30 min tras el último prompt
+      # Evita recarga de 30-60s entre prompts en sesiones de trabajo activas
+      OLLAMA_KEEP_ALIVE: "30m"
+
+      # Limitar arenas glibc: reduce fragmentación de heap en procesos long-running
+      MALLOC_ARENA_MAX: "2"
+
+    # Memoria compartida ampliada: necesaria para modelos grandes
+    # Con 32 GB de RAM unificada, 16 GB de shm es razonable
+    shm_size: "16g"
+
+    # Límite de memoria del contenedor (OS + escritorio + apps: ~8-12 GB medidos en uso cotidiano)
+    mem_limit: "18g"
+
+    # Inicializar IPEX-LLM con el perfil Arc y arrancar Ollama
+    command: >
+      bash -c "
+        cd /llm/scripts/ &&
+        source ipex-llm-init --gpu --device Arc &&
+        bash start-ollama.sh &&
+        echo '========================================' &&
+        echo 'IPEX-LLM listo. Recuerda aplicar los Modelfiles si has recreado el contenedor:' &&
+        echo '  ./modelfiles/apply.sh' &&
+        echo '========================================' &&
+        tail -f /llm/ollama/ollama.log
+      "
+
+    # Health check: verificar que el API de Ollama responde
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s  # Dar tiempo a la compilación inicial de kernels SYCL

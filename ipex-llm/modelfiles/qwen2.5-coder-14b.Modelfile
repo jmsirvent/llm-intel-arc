@@ -1,0 +1,14 @@
+FROM qwen2.5-coder:14b
+
+# Temperatura baja: salidas deterministas para generación de código
+PARAMETER temperature 0.1
+PARAMETER top_p 0.95
+# 16K: contexto amplio para sesiones agénticas de Cline (múltiples ficheros + historial)
+PARAMETER num_ctx 16384
+
+SYSTEM """
+You are an expert software engineer. Write clean, efficient, production-ready code.
+Prefer minimal solutions — no unnecessary abstractions or speculative features.
+Match the user's language, style, and existing conventions.
+When explaining code, be concise: focus on the why, not the what.
+"""

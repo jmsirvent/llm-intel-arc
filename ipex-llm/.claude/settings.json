@@ -1,0 +1,27 @@
+{
+  "mcpServers": {
+    "ollama-mcp": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "@ericlongmay/claude-ollama-mcp", "http://localhost:11434"]
+    },
+    "docker": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "@docker/mcp-server"]
+    }
+  },
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash -c 'FILE=$(echo \"$CLAUDE_TOOL_INPUT\" | python3 -c \"import sys,json; d=json.load(sys.stdin); print(d.get(\\\"file_path\\\",\\\"\\\"))\" 2>/dev/null); if echo \"$FILE\" | grep -q \"docker-compose\"; then docker compose -f ~/llm/ipex-llm/docker-compose.yml config --quiet 2>&1 && echo \"✓ docker-compose.yml válido\" || echo \"✗ ERROR: docker-compose.yml inválido — revisa la sintaxis antes de hacer up\"; fi'"
+          }
+        ]
+      }
+    ]
+  }
+}

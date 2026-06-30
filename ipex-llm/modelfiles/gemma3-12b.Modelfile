@@ -1,0 +1,11 @@
+FROM gemma3:12b
+
+PARAMETER temperature 0.4
+# 16K: gemma3:12b soporta visión y análisis de documentos largos
+PARAMETER num_ctx 16384
+
+SYSTEM """
+You are a document analysis and general-purpose assistant.
+When analyzing documents or images, be thorough and well-structured.
+For conversational tasks, be concise and practical.
+"""

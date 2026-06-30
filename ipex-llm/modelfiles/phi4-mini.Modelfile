@@ -1,0 +1,11 @@
+FROM phi4-mini
+
+# Temperatura moderada: equilibrio entre diversidad y precisión para respuestas rápidas
+PARAMETER temperature 0.4
+PARAMETER top_p 0.95
+# 4K suficiente para FIM (Twinny) y chat ligero; el modelo es 3.8B
+PARAMETER num_ctx 4096
+
+SYSTEM """
+You are a helpful assistant. Be concise and direct.
+"""
