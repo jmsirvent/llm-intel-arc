@@ -47,3 +47,21 @@ Projects under `~/llm/` prioritize **native installation over Docker** for local
 - Direct GPU access without passthrough or device mapping
 - Lower management overhead
 - Docker was used with IPEX-LLM because it was the only way to distribute that stack — not by preference
+
+### Pending: normalize client-facing API across backends
+
+**Status: decided, not yet implemented.** Only one inference backend runs at a time on this
+machine (single GPU, shared memory — see the memory budget in `llama-cpp-arc`'s guide, §7), so
+a reverse proxy is unnecessary complexity. Instead, standardize on a fixed convention so coding
+clients (OpenCode, Twinny, Cline, CodeGPT) never need reconfiguring when switching backends:
+
+- **Port `8080`** and the **OpenAI-compatible surface (`/v1`)** for every backend — IPEX-LLM/Ollama
+  (currently on `11434`, would need `OLLAMA_HOST=0.0.0.0:8080`), `llama-cpp-arc` (already on `8080`
+  by convention), and any future vLLM setup (`--port 8080` by default).
+- Clients get configured **once** as "OpenAI Compatible, `localhost:8080`, `/v1`" and stay that way
+  regardless of which backend is actually serving requests.
+- **Residual friction that doesn't go away:** the `model` field differs per backend (Ollama tags
+  like `qwen3:8b`, llama.cpp GGUF filenames, vLLM HF repo ids) — switching backends still means
+  updating that one field per client, just not the whole connection config.
+- **Cross-project scope:** implementing this touches both `ipex-llm/` (change Ollama's port) and
+  `llama-cpp-arc/` (already compliant) — coordinate changes across both when this gets picked up.
