@@ -16,6 +16,16 @@ TOKENS=128
 PROMPT="Write a detailed explanation of how transformer neural networks work in natural language processing, covering self-attention mechanisms, positional encoding, layer normalization, and the encoder-decoder architecture. Include concrete examples."
 
 while [[ $# -gt 0 ]]; do
+  # Flags below all take a value — bail with a clear message instead of
+  # letting `set -u` abort on an unbound `$2` when the flag is the last arg.
+  case "$1" in
+    -n|-p|-t|--port)
+      if [[ $# -lt 2 ]]; then
+        echo "ERROR: $1 requires a value" >&2
+        exit 1
+      fi
+      ;;
+  esac
   case "$1" in
     -n) RUNS="$2"; shift 2 ;;
     -p) PROMPT="$2"; shift 2 ;;
@@ -55,15 +65,19 @@ for i in $(seq 1 "$RUNS"); do
 
   result=$(python3 - "$response" <<'PYEOF'
 import json, sys
-d = json.loads(sys.argv[1])
-t = d['timings']
-gen      = t['predicted_per_second']
-prefill  = t['prompt_per_second']
-accepted = t.get('draft_n_accepted', 0)
-drafted  = t.get('draft_n', 0)
+try:
+    d = json.loads(sys.argv[1])
+    t = d['timings']
+    gen      = t['predicted_per_second']
+    prefill  = t['prompt_per_second']
+    accepted = t.get('draft_n_accepted', 0)
+    drafted  = t.get('draft_n', 0)
+except (json.JSONDecodeError, KeyError) as e:
+    print(f"ERROR: server returned an unexpected response ({e}) — is llama-server actually running the model, not an error page?", file=sys.stderr)
+    sys.exit(1)
 print(f"{gen:.2f} {prefill:.0f} {accepted} {drafted}")
 PYEOF
-)
+) || { echo "ERROR: run $i/${RUNS} failed — see above"; exit 1; }
 
   read -r gen prefill accepted drafted <<< "$result"
   total_gen=$(python3 -c "print($total_gen + $gen)")

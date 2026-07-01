@@ -124,7 +124,11 @@ drop_caches() {
   if [[ -x "${DROP_CACHES}" ]]; then
     "${DROP_CACHES}"
   else
-    # Inline fallback if drop-caches.sh is not present
+    # Inline fallback if drop-caches.sh is missing. Needs sudo because
+    # /proc/sys/vm/drop_caches and swapoff/swapon are root-only. Scope is the
+    # whole machine (page cache + all swap, not just this benchmark's model) —
+    # affects other running processes, not only llama-bench.
+    yellow "WARNING: dropping system-wide page cache and cycling all swap (affects other processes)"
     sudo sync
     sudo sh -c 'echo 3 > /proc/sys/vm/drop_caches'
     sudo swapoff -a && sudo swapon -a
@@ -161,16 +165,28 @@ run_bench() {
     -ngl "${NGL}" \
     --output md \
     2>&1 | tee -a "${result_file}"
+  local bench_status="${PIPESTATUS[0]}"
+
+  if [[ "${bench_status}" -ne 0 ]]; then
+    sep
+    red "  FAILED: ${display_name} (llama-bench exit ${bench_status}) — see ${result_file}"
+    sep
+    return 1
+  fi
 
   # Extract gen and prefill numbers from the markdown table for a clean summary
+  # (|| true: a missing match must not abort the script under set -e — the
+  # bench itself already succeeded above, this is just cosmetic reporting)
   local gen prefill
-  gen=$(grep    "tg${TG}"  "${result_file}" | awk -F'|' '{gsub(/ /,"",$7); print $7}' | cut -d'±' -f1 | head -1)
-  prefill=$(grep "pp${PP}" "${result_file}" | awk -F'|' '{gsub(/ /,"",$7); print $7}' | cut -d'±' -f1 | head -1)
+  gen=$(grep    "tg${TG}"  "${result_file}" | awk -F'|' '{gsub(/ /,"",$7); print $7}' | cut -d'±' -f1 | head -1) || true
+  prefill=$(grep "pp${PP}" "${result_file}" | awk -F'|' '{gsub(/ /,"",$7); print $7}' | cut -d'±' -f1 | head -1) || true
 
   sep
   if [[ -n "${gen}" && -n "${prefill}" ]]; then
     green "  Gen (tg${TG})    : ${gen} tok/s"
     green "  Prefill (pp${PP}) : ${prefill} tok/s"
+  else
+    yellow "  Could not parse gen/prefill from output — check ${result_file}"
   fi
   echo "  RAM    : $(mem_available_gb) available"
   echo "  Saved  : ${result_file}"
@@ -273,9 +289,15 @@ show_menu() {
         exit 0
         ;;
       a|A)
+        local -a failed=()
         for i in "${!avail_names[@]}"; do
-          run_bench "${avail_names[$i]}" "${avail_files[$i]}"
+          run_bench "${avail_names[$i]}" "${avail_files[$i]}" || failed+=("${avail_names[$i]}")
         done
+        if [[ ${#failed[@]} -gt 0 ]]; then
+          sep
+          red "  Failed (${#failed[@]}/${#avail_names[@]}): ${failed[*]}"
+          sep
+        fi
         exit 0
         ;;
       ''|*[!0-9]*)
