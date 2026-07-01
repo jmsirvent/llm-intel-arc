@@ -1,0 +1,23 @@
+=== DeepSeek-R1-Distill-Qwen-7B-Q4_K_M.gguf ===
+| model                          |       size |     params | backend    | ngl |            test |                  t/s |
+| ------------------------------ | ---------: | ---------: | ---------- | --: | --------------: | -------------------: |
+| qwen2 7B Q4_K - Medium         |   4.36 GiB |     7.62 B | SYCL       | 999 |           pp512 |       524.51 ± 30.80 |
+| qwen2 7B Q4_K - Medium         |   4.36 GiB |     7.62 B | SYCL       | 999 |           tg128 |         20.93 ± 0.26 |
+
+build: 86b94708f (9843)
+
+=== gemma-4-12B-it-Q4_K_M.gguf ===
+| model                          |       size |     params | backend    | ngl |            test |                  t/s |
+| ------------------------------ | ---------: | ---------: | ---------- | --: | --------------: | -------------------: |
+| gemma4 ?B Q4_K - Medium        |   7.12 GiB |    11.91 B | SYCL       | 999 |           pp512 |        272.90 ± 1.01 |
+| gemma4 ?B Q4_K - Medium        |   7.12 GiB |    11.91 B | SYCL       | 999 |           tg128 |         11.34 ± 0.05 |
+
+build: 86b94708f (9843)
+
+=== gemma-4-E4B-it-Q4_K_M.gguf ===
+| model                          |       size |     params | backend    | ngl |            test |                  t/s |
+| ------------------------------ | ---------: | ---------: | ---------- | --: | --------------: | -------------------: |
+| gemma4 E4B Q4_K - Medium       |   4.62 GiB |     7.52 B | SYCL       | 999 |           pp512 |        617.06 ± 1.90 |
+| gemma4 E4B Q4_K - Medium       |   4.62 GiB |     7.52 B | SYCL       | 999 |           tg128 |         26.73 ± 0.19 |
+
+build: 86b94708f (9843)

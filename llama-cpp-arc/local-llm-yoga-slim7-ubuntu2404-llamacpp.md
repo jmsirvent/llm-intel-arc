@@ -349,22 +349,22 @@ Always use verified publishers: **bartowski**, **unsloth**, **lmstudio-community
 | Model | Quant | GGUF size | RAM (bench) | Role | HF repo | Gen tok/s |
 |---|---|---|---|---|---|---|
 | Phi-4-mini-Instruct | Q4\_K\_M | 2.5 GB | 2.31 GiB | FIM autocomplete (Twinny) | bartowski | **33.97** |
+| Gemma-4-E4B-IT | Q4\_K\_M | 4.9 GB | 4.62 GiB | Fast general / vision / audio | unsloth/gemma-4-e4b-it-GGUF | **26.73** |
+| DeepSeek-R1-Distill-Qwen-7B | Q4\_K\_M | 4.7 GB | 4.36 GiB | Reasoning with chain-of-thought | bartowski | **20.93** |
 | Qwen2.5-Coder-7B-Instruct | Q4\_K\_M | 4.7 GB | 4.36 GiB | Fast coding / autocomplete | bartowski | **19.42** |
 | Llama-3.1-8B-Instruct | Q4\_K\_M | 4.9 GB | 4.58 GiB | Fast general purpose | bartowski | **18.87** |
 | Qwen3-8B | Q4\_K\_M | 5.2 GB | 4.86 GiB | Reasoning / long context | unsloth | **15.25** |
+| Gemma-4-12B-IT | Q4\_K\_M | 7.7 GB | 7.12 GiB | Vision / reasoning / audio (256K ctx) | bartowski/gemma-4-12b-it-GGUF | **11.34** |
 | Ornith-1.0-9B | Q6\_K | 7.4 GB | 6.84 GiB | Agentic coding / tool-calling | deepreinforce-ai/Ornith-1.0-9B-GGUF | **10.20** |
-| Gemma-3-12B-IT | Q4\_K\_M | 7.3 GB | 6.79 GiB | General / vision | bartowski/google\_gemma-3-12b-it-GGUF | **7.84** |
+| Qwen3-14B *(optional)* | Q4\_K\_M | 9.0 GB | 8.38 GiB | Deep reasoning | unsloth | **10.09** |
 | Qwen2.5-Coder-14B-Instruct | Q4\_K\_M | 9.0 GB | 8.37 GiB | Agentic coding (Cline) | bartowski | **9.92** |
-| Qwen3-14B *(optional)* | Q4\_K\_M | 9.0 GB | 8.38 GiB | Deep reasoning (slower) | unsloth | **10.09** |
-| Gemma-4-12B-IT *(pending)* | Q4\_K\_M | 7.7 GB | — | Vision / reasoning / audio | bartowski/gemma-4-12b-it-GGUF | — |
-| Gemma-4-E4B-IT *(pending)* | Q4\_K\_M | 5.0 GB | — | Compact vision / multimodal | unsloth/gemma-4-e4b-it-GGUF | — |
 
 > RAM column: memory allocated by llama.cpp SYCL during `llama-bench` (`-p 512 -n 128 -ngl 999`).
 > Full benchmark results and IPEX-LLM comparison: §8.3.
-> Qwen3-14B: same speed as the 14B coders but double the RAM of Qwen3-8B — only worth it when reasoning depth matters more than throughput.
-> Gemma-3: the Ollama blob is incompatible with llama.cpp ≥ build 86b94708 — use `bartowski/google_gemma-3-12b-it-GGUF`.
-> Gemma-4-12B: replaces Gemma-3-12B — same size class, adds 256K context, audio/video, configurable thinking mode. Repo naming differs from Gemma 3: `bartowski/gemma-4-12b-it-GGUF` (no `google_` prefix). Also download `mtp-gemma-4-12B-it-Q4_0.gguf` (323 MB) for MTP speculative decoding (~8 GiB total vs 12.7 GiB with a separate draft model).
-> Gemma-4-E4B: MatFormer architecture (4B active params from larger base) — not compatible as speculative decoding draft for the 12B (different tokenizer). Standalone multimodal model; pending evaluation as replacement or complement for vision workloads.
+> Qwen3-14B: same speed as the 14B coders but double the RAM of Qwen3-8B — only worth it when reasoning depth matters more than throughput. Also useful as speculative decoding target with Qwen3-8B as draft (§8.4).
+> Gemma-4-12B: replaces Gemma-3-12B (+45% gen speed: 11.34 vs 7.84 tok/s), adds 256K context, audio/video, configurable thinking mode. Repo: `bartowski/gemma-4-12b-it-GGUF` (no `google_` prefix, unlike Gemma 3). Download `mtp-gemma-4-12B-it-Q4_0.gguf` (323 MB) alongside for MTP speculative decoding: 7.12 + 0.31 GiB total vs 12.7 GiB with a separate draft model.
+> Gemma-4-E4B: MatFormer architecture — 7.52B declared params but runs at the efficiency of a ~4B model. Fastest general-purpose model under 5 GiB (26.73 tok/s). Not compatible as speculative decoding draft for Gemma-4-12B (different tokenizer).
+> DeepSeek-R1-Distill-Qwen-7B: Qwen2 architecture distilled from DeepSeek-R1. Faster than Qwen3-8B for reasoning tasks with internal chain-of-thought (`<think>` blocks); shares tokenizer with Qwen2.5-Coder models.
 
 ### 7.2 Ornith-1.0-9B — specific configuration
 
@@ -509,13 +509,16 @@ watch -n1 'grep -E "MemFree|MemAvailable" /proc/meminfo'
 | Model | Quant | Size | Gen tok/s | Prefill tok/s | vs IPEX-LLM gen | vs IPEX-LLM prefill |
 |---|---|---|---|---|---|---|
 | phi4-mini | Q4\_K\_M | 2.31 GiB | **33.97** | **819** | — ² | — ² |
+| gemma4-e4b | Q4\_K\_M | 4.62 GiB | **26.73** | **617** | — ² | — ² |
+| deepseek-r1-distill-qwen-7b | Q4\_K\_M | 4.36 GiB | **20.93** | **525** | — ² | — ² |
 | qwen2.5-coder-7b | Q4\_K\_M | 4.36 GiB | **19.42** | **479** | ≈ (−3%) | — ⁴ |
 | llama3.1-8b-instruct | Q4\_K\_M | 4.58 GiB | **18.87** | **358** | ≈ (−0%) | −17% ¹ |
 | qwen3-8b | Q4\_K\_M | 4.86 GiB | **15.25** | **323** | −16% | −38% ¹ |
+| gemma4-12b | Q4\_K\_M | 7.12 GiB | **11.34** | **273** | +8% ⁵ | +14% ⁵ |
 | ornith-1.0-9b | Q6\_K | 6.84 GiB | **10.20** | **330** | — ² | — ² |
 | qwen3-14b *(optional)* | Q4\_K\_M | 8.38 GiB | **10.09** | **225** | — ² | — ² |
 | qwen2.5-coder-14b | Q4\_K\_M | 8.37 GiB | **9.92** | **227** | — ³ | — ³ |
-| gemma3-12b | Q4\_K\_M | 6.79 GiB | **7.84** | **211** | −25% | −12% |
+| ~~gemma3-12b~~ *(replaced)* | Q4\_K\_M | 6.79 GiB | ~~7.84~~ | ~~211~~ | — | — |
 
 > ¹ IPEX-LLM had Flash Attention enabled, which mainly accelerates prefill (O(n²) → O(n) attention).
 > Generation speed is a fairer comparison — llama3.1 is virtually identical (18.87 vs 18.9 tok/s).
@@ -527,8 +530,7 @@ watch -n1 'grep -E "MemFree|MemAvailable" /proc/meminfo'
 >
 > ⁴ IPEX-LLM baseline for qwen2.5-coder:7b was 20.0 tok/s gen (with FA) — llama.cpp reaches 19.42 tok/s without FA, effectively equivalent.
 >
-> Note: gemma3 Ollama blob is incompatible with llama.cpp ≥ 86b94708 (missing metadata key
-> `gemma3.attention.layer_norm_rms_epsilon`). Use `bartowski/google_gemma-3-12b-it-GGUF` instead.
+> ⁵ Gemma-4-12B replaces Gemma-3-12B (IPEX-LLM baseline: 10.5 tok/s gen, 240 tok/s prefill). Gemma-4 is +8% faster on generation and +14% on prefill despite running without Flash Attention.
 
 **Baseline reference — IPEX-LLM (Q4\_K\_M, Arc 140V, CTX=8192, Flash Attention on):**
 
@@ -542,57 +544,102 @@ watch -n1 'grep -E "MemFree|MemAvailable" /proc/meminfo'
 
 ### 8.4 Speculative decoding ⚠️
 
-Speculative decoding uses a small "draft" model to generate candidate tokens, which a larger "target" model then verifies in a single forward pass. When the draft's predictions are correct, multiple tokens are confirmed at once — multiplying generation throughput without changing output quality.
+Speculative decoding uses a small "draft" model to generate candidate tokens, which a larger "target" model verifies in a single forward pass. When the draft's predictions are correct, multiple tokens are confirmed at once — multiplying generation throughput without changing output quality.
 
-**Requirement:** draft and target must share the same tokenizer and vocabulary (same architecture family).
+Two draft mechanisms are supported by llama.cpp:
 
-**Compatible pairs from the current lineup:**
+- **MTP head** — a tiny secondary prediction head (~100–465 MB) trained as part of the target model. Higher acceptance rates, minimal memory overhead. Loaded via `--draft-model` just like a full model.
+- **Separate draft model** — a full smaller model of the same architecture family (same tokenizer required).
 
-| Draft | Target | Architecture | Combined VRAM | Expected speedup |
-|---|---|---|---|---|
-| Qwen2.5-Coder-7B (4.36 GiB) | Qwen2.5-Coder-14B (8.37 GiB) | Qwen2 | 12.7 GiB | **1.5–2×** (coding) |
-| Qwen3-8B (4.86 GiB) | Qwen3-14B *(optional)* (8.38 GiB) | Qwen3 | 13.2 GiB | 1.3–1.8× |
+#### Draft availability — current lineup
 
-Both pairs fit within the ~20 GB available pool including KV cache overhead.
+| Target | Draft | Type | Draft size | Combined VRAM | Needs download |
+|---|---|---|---|---|---|
+| Gemma-4-12B (7.12 GiB) | `mtp-gemma-4-12B-it-Q4_0` | MTP head | 0.32 GiB | **7.44 GiB** | ✅ yes |
+| Gemma-4-E4B (4.62 GiB) | `mtp-gemma-4-E4B-it` | MTP head | 0.10 GiB | **4.72 GiB** | ✅ yes |
+| DeepSeek-R1-7B (4.36 GiB) | DeepSeek-R1-Distill-Qwen-1.5B | Separate model | 1.1 GiB | **5.46 GiB** | ✅ yes |
+| Qwen2.5-Coder-14B (8.37 GiB) | Qwen2.5-Coder-7B | Separate model | 4.36 GiB | 12.73 GiB | already downloaded |
+| Qwen3-14B *(optional)* (8.38 GiB) | Qwen3-8B | Separate model | 4.86 GiB | 13.24 GiB | already downloaded |
 
-> **Why coding benefits most:** code generation has higher token predictability (indentation, keywords, variable names) → draft acceptance rates of 60–80% → more tokens confirmed per verification step.
-> The Qwen3 pair activates the only concrete use case for the "optional" Qwen3-14B — as speculative decoding target it justifies the RAM overhead.
+Models without a draft option: Phi-4-mini (too small, not needed), Llama-3.1-8B (no compatible small Llama 3.1), Ornith-1.0-9B (unique qwen35 architecture, no public draft).
 
-**Starting the server with speculative decoding:**
+> **Why MTP heads are preferred:** trained specifically against the target model's internal representations → higher acceptance rates than a generic smaller model. The Gemma-4 MTP heads from bartowski/unsloth are the only MTP-enabled models in this lineup.
+>
+> **Why coding benefits most from separate drafts:** code generation has higher token predictability (indentation, keywords, variable names) → draft acceptance rates of 60–80%. The Qwen3-14B pair also activates the only concrete use case for keeping that optional model.
+>
+> **DeepSeek-R1 pair:** both 1.5B and 7B are distillations from the same R1 teacher model using Qwen2 architecture and identical tokenizer — exceptionally high acceptance rates expected.
+
+#### Downloading the missing draft models
+
+```bash
+# Gemma-4-12B MTP head (bartowski — in same repo as the main model)
+hf download bartowski/gemma-4-12b-it-GGUF \
+  mtp-gemma-4-12B-it-Q4_0.gguf \
+  --local-dir ~/llm/llama-cpp-arc/models/
+
+# Gemma-4-E4B MTP head (unsloth)
+hf download unsloth/gemma-4-e4b-it-GGUF \
+  mtp-gemma-4-E4B-it.gguf \
+  --local-dir ~/llm/llama-cpp-arc/models/
+
+# DeepSeek-R1-Distill-Qwen-1.5B (bartowski)
+hf download bartowski/DeepSeek-R1-Distill-Qwen-1.5B-GGUF \
+  DeepSeek-R1-Distill-Qwen-1.5B-Q4_K_M.gguf \
+  --local-dir ~/llm/llama-cpp-arc/models/
+```
+
+#### Starting the server with speculative decoding
 
 ```bash
 cd ~/llm/llama-cpp-arc/llama.cpp
 
+# Gemma-4-12B + MTP head (most efficient: only 0.32 GiB overhead)
+./build/bin/llama-server \
+  -m ../models/gemma-4-12B-it-Q4_K_M.gguf \
+  --draft-model ../models/mtp-gemma-4-12B-it-Q4_0.gguf \
+  --draft-max 8 \
+  -ngl 999 --port 8080
+
+# DeepSeek-R1-7B + 1.5B draft (reasoning tasks)
+./build/bin/llama-server \
+  -m ../models/DeepSeek-R1-Distill-Qwen-7B-Q4_K_M.gguf \
+  --draft-model ../models/DeepSeek-R1-Distill-Qwen-1.5B-Q4_K_M.gguf \
+  --draft-max 8 \
+  -ngl 999 --port 8080
+
+# Qwen2.5-Coder-14B + 7B draft (coding agent — both already downloaded)
 ./build/bin/llama-server \
   -m ../models/Qwen2.5-Coder-14B-Instruct-Q4_K_M.gguf \
   --draft-model ../models/Qwen2.5-Coder-7B-Instruct-Q4_K_M.gguf \
   --draft-max 8 \
-  -ngl 999 \
-  --port 8080
+  -ngl 999 --port 8080
 ```
 
 | Parameter | Description |
 |---|---|
-| `--draft-model` | Path to the draft (small) model |
+| `--draft-model` | Path to MTP head or draft model — same flag for both types |
 | `--draft-max` | Max speculative tokens per step — start with 8, tune based on acceptance rate |
 
-**Benchmarking speculative decoding vs baseline:**
+#### Benchmarking speculative decoding vs baseline
 
 ```bash
-# Baseline (no draft)
+cd ~/llm/llama-cpp-arc/llama.cpp
+
+# Example: Gemma-4-12B with MTP head
+# Baseline
 ./build/bin/llama-bench \
-  -m ../models/Qwen2.5-Coder-14B-Instruct-Q4_K_M.gguf \
+  -m ../models/gemma-4-12B-it-Q4_K_M.gguf \
   -p 512 -n 128 -ngl 999 --output md
 
-# With speculative decoding
+# With MTP speculative decoding
 ./build/bin/llama-bench \
-  -m ../models/Qwen2.5-Coder-14B-Instruct-Q4_K_M.gguf \
-  --draft-model ../models/Qwen2.5-Coder-7B-Instruct-Q4_K_M.gguf \
+  -m ../models/gemma-4-12B-it-Q4_K_M.gguf \
+  --draft-model ../models/mtp-gemma-4-12B-it-Q4_0.gguf \
   --draft-max 8 \
   -p 512 -n 128 -ngl 999 --output md
 ```
 
-Compare the `tg128` result against the 9.92 tok/s baseline from §8.3. The bench output includes draft acceptance metrics.
+Compare `tg128` against the §8.3 baseline for each target model. The bench output includes draft acceptance rate metrics.
 
 > **Tuning `--draft-max`:** higher values increase potential speedup but waste work on rejected tokens. 8 is a safe default; try 4–16 to find the value that maximises effective tok/s. When running as a server, the `/metrics` endpoint reports the live acceptance rate.
 

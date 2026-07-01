@@ -67,13 +67,15 @@ curl http://localhost:8080/health
 | Model | Quant | Gen tok/s | Prefill tok/s |
 |---|---|---|---|
 | phi4-mini | Q4\_K\_M | **33.97** | **819** |
+| gemma4-e4b | Q4\_K\_M | **26.73** | **617** |
+| deepseek-r1-distill-qwen-7b | Q4\_K\_M | **20.93** | **525** |
 | qwen2.5-coder-7b | Q4\_K\_M | **19.42** | **479** |
 | llama3.1-8b-instruct | Q4\_K\_M | **18.87** | **358** |
 | qwen3-8b | Q4\_K\_M | **15.25** | **323** |
+| gemma4-12b | Q4\_K\_M | **11.34** | **273** |
 | ornith-1.0-9b | Q6\_K | **10.20** | **330** |
 | qwen3-14b *(optional)* | Q4\_K\_M | **10.09** | **225** |
 | qwen2.5-coder-14b | Q4\_K\_M | **9.92** | **227** |
-| gemma3-12b | Q4\_K\_M | **7.84** | **211** |
 
 ## IPEX-LLM baseline (previous stack, Flash Attention on, Q4\_K\_M)
 
