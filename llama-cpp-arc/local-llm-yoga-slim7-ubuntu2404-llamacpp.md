@@ -37,14 +37,13 @@
 
 ### Why native SYCL llama.cpp
 
-The previous stack (`../ipex-llm/`) used IPEX-LLM, an Intel-patched fork of Ollama for SYCL/Level Zero. That project was archived in January 2026. llama.cpp is the actual underlying inference engine — IPEX-LLM wrapped it in Docker to distribute the precompiled Intel toolchain.
+The previous stack (`../ipex-llm/`) used IPEX-LLM, an Intel-patched inference server for SYCL/Level Zero — see that project's own docs for its architecture. That project was archived in January 2026. llama.cpp is the actual underlying inference engine — IPEX-LLM wrapped it in Docker to distribute the precompiled Intel toolchain.
 
 This stack compiles llama.cpp directly with the Intel `icx/icpx` compiler (oneAPI), no Docker intermediary. What you gain:
 
-- Speculative decoding (draft model) — potential +50–150% on generation throughput
 - IQ quantizations (IQ4\_XS, IQ3\_M) — better quality per GB than K\_M
 - Up-to-date model support with llama.cpp upstream
-- OpenAI-compatible API at `localhost:8080` — same clients as Ollama, only the port changes
+- OpenAI-compatible API at `localhost:8080` — any standard OpenAI-client integration works unchanged
 
 ```
 VS Code (Twinny / Cline / Roo Code) · Open WebUI · Python scripts
@@ -217,7 +216,7 @@ Available devices:
   SYCL0: Intel(R) Arc(TM) Graphics (29283 MiB, 6959 MiB free)
 ```
 
-> **29283 MiB total (~28.6 GB):** the `xe` driver exposes almost all unified RAM as the GPU pool — expected on Lunar Lake. Free memory varies with OS load; ~7–12 GB free in daily desktop use.
+> **29283 MiB total (~28.6 GB):** the `xe` driver exposes almost all unified RAM as the GPU pool — expected on Lunar Lake. Free memory shown here (6959 MiB) is a single snapshot, not a baseline — it varies with OS load and with GPU pool retention from prior sessions (§7 memory budget). Always re-check with `--list-devices` or `xpu-smi stats -d 0` before assuming a figure from this document still holds.
 
 > **`DGGML_SYCL_F16=ON`**: enables FP16 operations in the SYCL backend. Reduces memory usage and can improve throughput on hardware with native FP16 support such as the Arc 140V Xe2.
 
@@ -278,7 +277,7 @@ curl -s http://localhost:8080/v1/chat/completions \
 | `--n-gpu-layers 999` | 999 (all) | Load all layers onto GPU — no CPU/GPU split |
 | `--ctx-size` | 8192 | Default context; increase to 16384–32768 depending on model and available RAM |
 | `--parallel` | 1 | Explicit single-user — avoids reserving buffers for parallel requests |
-| `--port` | 8080 | API port (different from Ollama which uses 11434) |
+| `--port` | 8080 | API port for this server |
 | `--host` | 0.0.0.0 | Listen on all interfaces |
 
 ### 6.3 First model load
@@ -334,9 +333,9 @@ chmod +x ~/llm/llama-cpp-arc/start-server.sh
 ### Memory budget
 
 - Total RAM: 32 GB
-- OS + desktop + apps in use: ~11–12 GB
-- Available for models (measured with IPEX-LLM): ~19–20 GB after clean reboot
-- **Safe ceiling in daily use: 16 GB of model**
+- OS + desktop + apps in use: ~11–12 GB in typical daily use
+
+There is no fixed "available for models" figure — free memory on this unified-memory system varies with OS load and, more importantly, with the `xe` driver's GPU pool retention behavior (next note). Observed free memory has ranged from ~7 GB (GPU pool populated by a prior session, driver not reclaiming pages) up to ~19–20 GB (clean reboot, no prior GPU allocations). Treat any single number in this document as a snapshot, not a ceiling — always check current availability before loading a large model (`free -h`, `xpu-smi stats -d 0`).
 
 > With 32 GB of unified RAM it is not possible to separate "GPU VRAM" from the rest of RAM. The Arc 140V accesses the same LPDDR5X pool as the CPU.
 
@@ -344,26 +343,31 @@ chmod +x ~/llm/llama-cpp-arc/start-server.sh
 
 ### 7.1 Recommended models (GGUFs from Hugging Face)
 
-Always use verified publishers: **bartowski**, **unsloth**, **lmstudio-community**. Do not use unknown publishers.
+Always use verified publishers. Two categories are acceptable:
 
-| Model | Quant | GGUF size | RAM (bench) | Role | HF repo | Gen tok/s |
-|---|---|---|---|---|---|---|
-| Phi-4-mini-Instruct | Q4\_K\_M | 2.5 GB | 2.31 GiB | FIM autocomplete (Twinny) | bartowski | **33.97** |
-| Gemma-4-E4B-IT | Q4\_K\_M | 4.9 GB | 4.62 GiB | Fast general / vision / audio | unsloth/gemma-4-e4b-it-GGUF | **26.73** |
-| DeepSeek-R1-Distill-Qwen-7B | Q4\_K\_M | 4.7 GB | 4.36 GiB | Reasoning with chain-of-thought | bartowski | **20.93** |
-| Qwen2.5-Coder-7B-Instruct | Q4\_K\_M | 4.7 GB | 4.36 GiB | Fast coding / autocomplete | bartowski | **19.42** |
-| Llama-3.1-8B-Instruct | Q4\_K\_M | 4.9 GB | 4.58 GiB | Fast general purpose | bartowski | **18.87** |
-| Qwen3-8B | Q4\_K\_M | 5.2 GB | 4.86 GiB | Reasoning / long context | unsloth | **15.25** |
-| Gemma-4-12B-IT | Q4\_K\_M | 7.7 GB | 7.12 GiB | Vision / reasoning / audio (256K ctx) | bartowski/gemma-4-12b-it-GGUF | **11.34** |
-| Ornith-1.0-9B | Q6\_K | 7.4 GB | 6.84 GiB | Agentic coding / tool-calling | deepreinforce-ai/Ornith-1.0-9B-GGUF | **10.20** |
-| Qwen3-14B *(optional)* | Q4\_K\_M | 9.0 GB | 8.38 GiB | Deep reasoning | unsloth | **10.09** |
-| Qwen2.5-Coder-14B-Instruct | Q4\_K\_M | 9.0 GB | 8.37 GiB | Agentic coding (Cline) | bartowski | **9.92** |
+- **Trusted GGUF quantizers** — community publishers with an established track record of correct quantization: **bartowski**, **unsloth**, **lmstudio-community**, **deepreinforce-ai** (author of Ornith, not a third-party quantizer, but reviewed as trustworthy for their own model).
+- **Original model publishers** — the organization that trained the model, when they publish GGUF directly: **Google** (Gemma), **Qwen team / Alibaba**, **DeepSeek**. Prefer a trusted quantizer's GGUF when one exists; fall back to the original publisher's own GGUF (e.g. `google/gemma-4-*-qat-q4_0-gguf`) when no third-party quant is available yet.
+
+Do not use unknown or unreviewed publishers outside these two categories.
+
+| Model | Quant | GGUF size | RAM (bench) | Primary use | Alternative use | HF repo | Gen tok/s |
+|---|---|---|---|---|---|---|---|
+| Phi-4-mini-Instruct | Q4\_K\_M | 2.5 GB | 2.31 GiB | FIM autocomplete (Twinny) | Low-latency general Q&A when speed matters more than depth (fastest model in the lineup) | bartowski | **33.97** |
+| Gemma-4-E4B-IT | Q4\_K\_M | 4.9 GB | 4.62 GiB | Fast general-purpose chat | Vision/audio understanding (multimodal input) when a lighter model than Gemma-4-12B suffices | unsloth/gemma-4-e4b-it-GGUF | **26.73** |
+| DeepSeek-R1-Distill-Qwen-7B | Q4\_K\_M | 4.7 GB | 4.36 GiB | Reasoning with chain-of-thought (`<think>` blocks) | Explaining/debugging logic step-by-step — the visible reasoning trace helps surface why an answer is wrong, not just that it is | bartowski | **20.93** |
+| Qwen2.5-Coder-7B-Instruct | Q4\_K\_M | 4.7 GB | 4.36 GiB | Fast coding / autocomplete | General-purpose lightweight assistant (non-code chat) when Llama-3.1-8B is already loaded elsewhere | bartowski | **19.42** |
+| Llama-3.1-8B-Instruct | Q4\_K\_M | 4.9 GB | 4.58 GiB | Fast general purpose | Multilingual tasks / translation — a documented strength of the Llama 3.1 base training | bartowski | **18.87** |
+| Qwen3-8B | Q4\_K\_M | 5.2 GB | 4.86 GiB | Reasoning / long context | Tool-calling / agentic chat — Qwen3 has native function-calling support | unsloth | **15.25** |
+| Gemma-4-12B-IT | Q4\_K\_M | 7.7 GB | 7.12 GiB | Vision + audio multimodal reasoning | Long-document analysis / summarization, leveraging the 256K context window | bartowski/gemma-4-12b-it-GGUF | **11.34** |
+| Ornith-1.0-9B | Q6\_K | 7.4 GB | 6.84 GiB | Agentic coding / tool-calling | Terminal/devops automation — trained on Terminal-Bench, not just SWE-Bench | deepreinforce-ai/Ornith-1.0-9B-GGUF | **10.20** |
+| Qwen3-14B *(optional)* | Q4\_K\_M | 9.0 GB | 8.38 GiB | Deep reasoning | Knowledge-intensive Q&A benefiting from the larger parameter count vs Qwen3-8B | unsloth | **10.09** |
+| Qwen2.5-Coder-14B-Instruct | Q4\_K\_M | 9.0 GB | 8.37 GiB | Agentic coding (Cline) | Code review / explaining unfamiliar code — larger model gives more reliable explanations than the 7B | bartowski | **9.92** |
 
 > RAM column: memory allocated by llama.cpp SYCL during `llama-bench` (`-p 512 -n 128 -ngl 999`).
 > Full benchmark results and IPEX-LLM comparison: §8.3.
-> Qwen3-14B: same speed as the 14B coders but double the RAM of Qwen3-8B — only worth it when reasoning depth matters more than throughput. Also useful as speculative decoding target with Qwen3-8B as draft (§8.4).
-> Gemma-4-12B: replaces Gemma-3-12B (+45% gen speed: 11.34 vs 7.84 tok/s), adds 256K context, audio/video, configurable thinking mode. Repo: `bartowski/gemma-4-12b-it-GGUF` (no `google_` prefix, unlike Gemma 3). Download `mtp-gemma-4-12B-it-Q4_0.gguf` (323 MB) alongside for MTP speculative decoding: 7.12 + 0.31 GiB total vs 12.7 GiB with a separate draft model.
-> Gemma-4-E4B: MatFormer architecture — 7.52B declared params but runs at the efficiency of a ~4B model. Fastest general-purpose model under 5 GiB (26.73 tok/s). Not compatible as speculative decoding draft for Gemma-4-12B (different tokenizer).
+> Qwen3-14B: same speed as the 14B coders but double the RAM of Qwen3-8B — only worth it when reasoning depth matters more than throughput. Speculative decoding with Qwen3-8B as draft was tested and found not viable on this hardware (§8.4) — despite 64% acceptance, net throughput regresses 38%.
+> Gemma-4-12B: replaces Gemma-3-12B (+45% gen speed: 11.34 vs 7.84 tok/s), adds 256K context, audio/video, configurable thinking mode. Repo: `bartowski/gemma-4-12b-it-GGUF` (no `google_` prefix, unlike Gemma 3). The `mtp-gemma-4-12B-it-Q4_0.gguf` MTP head is not usable as a draft model in llama.cpp upstream (`ctx_other` requirement, §8.4) — no download needed for speculative decoding purposes.
+> Gemma-4-E4B: MatFormer architecture — 7.52B declared params but runs at the efficiency of a ~4B model. Fastest general-purpose model under 5 GiB (26.73 tok/s). Vocab matches Gemma-4-12B (`n_vocab = 262144` in both) but was never tested as a separate draft model in §8.4 — only its MTP head was tested (fails, `ctx_other` incompatibility, unrelated to vocab). Untested as a §8.4-style separate draft; given the Gemma-4-E2B result (net regression despite matching vocab), unlikely to be worth pursuing.
 > DeepSeek-R1-Distill-Qwen-7B: Qwen2 architecture distilled from DeepSeek-R1. Faster than Qwen3-8B for reasoning tasks with internal chain-of-thought (`<think>` blocks); shares tokenizer with Qwen2.5-Coder models.
 
 ### 7.2 Ornith-1.0-9B — specific configuration
