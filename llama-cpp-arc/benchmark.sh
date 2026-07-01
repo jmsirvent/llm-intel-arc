@@ -77,10 +77,16 @@ CATALOG=(
 
 activate_oneapi() {
   # setvars.sh sets PATH, LD_LIBRARY_PATH, MKLROOT — required for libsvml.so
-  source /opt/intel/oneapi/setvars.sh --force 2>/dev/null || {
+  # It also references unset vars (e.g. OCL_ICD_FILENAMES) — under `set -u`
+  # that aborts the whole script (nounset errors ignore `||` guards). Silence
+  # nounset just for the source call, per Intel's documented workaround.
+  if [[ ! -f /opt/intel/oneapi/setvars.sh ]]; then
     red "ERROR: /opt/intel/oneapi/setvars.sh not found"
     exit 1
-  }
+  fi
+  set +u
+  source /opt/intel/oneapi/setvars.sh --force
+  set -u
   export GGML_SYCL_DEVICE=0
   export SYCL_CACHE_PERSISTENT=0   # workaround intel/llvm#21972 (oneAPI ≥ 2025.3)
   export ZES_ENABLE_SYSMAN=1
@@ -202,9 +208,9 @@ show_download_prompt() {
 
 show_menu() {
   # Build two ordered lists: available first, then not downloaded
-  local -a ordered_names ordered_files ordered_repos ordered_hffiles ordered_sizes ordered_available
-  local -a avail_names avail_files
-  local -a missing_names missing_files missing_repos missing_hffiles missing_sizes
+  local -a ordered_names=() ordered_files=() ordered_repos=() ordered_hffiles=() ordered_sizes=() ordered_available=()
+  local -a avail_names=() avail_files=()
+  local -a missing_names=() missing_files=() missing_repos=() missing_hffiles=() missing_sizes=()
 
   for entry in "${CATALOG[@]}"; do
     IFS='|' read -r name file repo hffile size <<< "${entry}"

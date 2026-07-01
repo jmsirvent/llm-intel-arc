@@ -98,7 +98,16 @@ start_server() {
   sep
 
   # Activate oneAPI
+  # setvars.sh references unset vars (e.g. OCL_ICD_FILENAMES) — under `set -u`
+  # that aborts the whole script (nounset errors ignore `||` guards). Silence
+  # nounset just for the source call, per Intel's documented workaround.
+  if [[ ! -f /opt/intel/oneapi/setvars.sh ]]; then
+    red "ERROR: /opt/intel/oneapi/setvars.sh not found"
+    exit 1
+  fi
+  set +u
   source /opt/intel/oneapi/setvars.sh --force
+  set -u
 
   # SYCL variables
   export GGML_SYCL_DEVICE=0
@@ -144,8 +153,8 @@ show_download_prompt() {
 # ── Menu ─────────────────────────────────────────────────────────────────────
 
 show_menu() {
-  local -a avail_names avail_files
-  local -a missing_names missing_files missing_repos missing_hffiles missing_sizes
+  local -a avail_names=() avail_files=()
+  local -a missing_names=() missing_files=() missing_repos=() missing_hffiles=() missing_sizes=()
 
   for entry in "${CATALOG[@]}"; do
     IFS='|' read -r name file repo hffile size <<< "${entry}"
