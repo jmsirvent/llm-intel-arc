@@ -29,20 +29,25 @@ green() { printf '\033[32m%s\033[0m\n' "$*"; }
 bold()  { printf '\033[1m%s\033[0m\n' "$*"; }
 sep()   { printf '%.0s─' {1..50}; echo; }
 
-mem_available_gb() {
-  awk '/^MemAvailable:/ { printf "%.1f GB", $2/1024/1024 }' /proc/meminfo
+mem_available_gib() {
+  awk '/^MemAvailable:/ { printf "%.1f GiB available", $2/1024/1024 }' /proc/meminfo
 }
 
-gpu_mem_used_mb() {
+gpu_mem_used_gib() {
+  # xpu-smi stats uses | as table borders: "| GPU Memory Used (MiB) | 17637 |"
+  # $NF is the trailing empty field after the last |; value is at $(NF-1)
   xpu-smi stats -d 0 2>/dev/null \
-    | awk '/Memory Used/ { print $NF " MiB used" }' \
-    | head -1 || echo "xpu-smi unavailable"
+    | awk -F'|' '/GPU Memory Used/ {
+        gsub(/ /, "", $(NF-1))
+        printf "%.1f GiB used\n", $(NF-1) / 1024
+      }' \
+    | head -1 || echo "unavailable"
 }
 
 sep
 bold "Memory before:"
-printf "  RAM : %s\n" "$(mem_available_gb)"
-printf "  GPU : %s\n" "$(gpu_mem_used_mb)"
+printf "  RAM : %s\n" "$(mem_available_gib)"
+printf "  GPU : %s\n" "$(gpu_mem_used_gib)"
 sep
 
 # Drop page cache, dentries and inodes (3 = all three combined)
@@ -57,7 +62,7 @@ printf "  ✓ Swap cycled\n"
 
 sep
 bold "Memory after:"
-printf "  RAM : %s\n" "$(mem_available_gb)"
-printf "  GPU : %s\n" "$(gpu_mem_used_mb)"
+printf "  RAM : %s\n" "$(mem_available_gib)"
+printf "  GPU : %s\n" "$(gpu_mem_used_gib)"
 sep
 green "Done."
