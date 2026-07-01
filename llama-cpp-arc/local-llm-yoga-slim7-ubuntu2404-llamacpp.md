@@ -463,12 +463,12 @@ sudo xpu-smi dump -d 0 -m 0,5,18 -i 1
 watch -n1 'grep -E "MemFree|MemAvailable" /proc/meminfo'
 ```
 
-### 8.3 Benchmark with llama-bench
+### 8.3 Benchmark with llama-bench ✅
 
 ```bash
 # Basic benchmark: prefill (512 tokens) + generation (128 tokens)
 ./build/bin/llama-bench \
-  -m models/qwen3-8b-q4_k_m.gguf \
+  -m models/Qwen3-8B-Q4_K_M.gguf \
   -p 512 -n 128 \
   -ngl 999 \
   --output md
@@ -481,7 +481,9 @@ watch -n1 'grep -E "MemFree|MemAvailable" /proc/meminfo'
 # Note: no -c flag — context size = -p + -n, no pre-allocation needed
 ```
 
-**llama-bench results — llama.cpp SYCL (Arc 140V, `-p 512 -n 128 -ngl 999`):**
+> **`~/llm/llama-cpp-arc/benchmark.sh`** wraps the command above in an interactive menu — same model catalog and ✓/✗ availability display as `start-server.sh` (§6.4), but running `llama-bench` with the baseline params (`-p 512 -n 128 -ngl 999 --output md`) instead of starting a server. It drops GPU/system caches between runs (`drop-caches.sh`) and saves each result to a timestamped `bench-YYYYMMDD-HHMMSS.txt` file. Usage: `./benchmark.sh` (menu), `./benchmark.sh <filename>` or `./benchmark.sh <name>` (specific model), `./benchmark.sh` menu option `a` (benchmark every available model sequentially).
+
+**llama-bench results — llama.cpp SYCL (Arc 140V, `-p 512 -n 128 -ngl 999`, Flash Attention off):**
 
 > ⚠️ Run sequentially in a loop. The `xe` driver retains GPU memory pages between model loads —
 > run gemma3 in isolation (fresh terminal or after `echo 3 > /proc/sys/vm/drop_caches`) to avoid OOM.
@@ -491,7 +493,7 @@ watch -n1 'grep -E "MemFree|MemAvailable" /proc/meminfo'
 | phi4-mini | Q4\_K\_M | 2.31 GiB | **33.97** | **819** | — ² | — ² |
 | gemma4-e4b | Q4\_K\_M | 4.62 GiB | **26.73** | **617** | — ² | — ² |
 | deepseek-r1-distill-qwen-7b | Q4\_K\_M | 4.36 GiB | **20.93** | **525** | — ² | — ² |
-| qwen2.5-coder-7b | Q4\_K\_M | 4.36 GiB | **19.42** | **479** | ≈ (−3%) | — ⁴ |
+| qwen2.5-coder-7b | Q4\_K\_M | 4.36 GiB | **19.42** | **479** | ≈ (−3%) | −41% ⁴ |
 | llama3.1-8b-instruct | Q4\_K\_M | 4.58 GiB | **18.87** | **358** | ≈ (−0%) | −17% ¹ |
 | qwen3-8b | Q4\_K\_M | 4.86 GiB | **15.25** | **323** | −16% | −38% ¹ |
 | gemma4-12b | Q4\_K\_M | 7.12 GiB | **11.34** | **273** | +8% ⁵ | +14% ⁵ |
@@ -502,15 +504,33 @@ watch -n1 'grep -E "MemFree|MemAvailable" /proc/meminfo'
 
 > ¹ IPEX-LLM had Flash Attention enabled, which mainly accelerates prefill (O(n²) → O(n) attention).
 > Generation speed is a fairer comparison — llama3.1 is virtually identical (18.87 vs 18.9 tok/s).
-> llama.cpp SYCL also supports FA (`-fa on`); not yet validated on Arc 140V.
+> FA on Arc 140V with llama.cpp SYCL was validated across 4 models — see the FA validation table below.
 >
 > ² No IPEX-LLM baseline for this model.
 >
 > ³ IPEX-LLM baseline used qwen2.5-coder **7B**; the table above benchmarks the **14B** variant — not directly comparable.
 >
-> ⁴ IPEX-LLM baseline for qwen2.5-coder:7b was 20.0 tok/s gen (with FA) — llama.cpp reaches 19.42 tok/s without FA, effectively equivalent.
+> ⁴ IPEX-LLM baseline for qwen2.5-coder:7b: 20.0 tok/s gen, 814 tok/s prefill (FA on). llama.cpp without FA: 19.42 gen (≈), 479 prefill (−41%).
+> With FA on: 19.97 gen (+3%), 329 prefill (−59% vs IPEX-LLM) — FA regresses prefill on Arc 140V.
 >
 > ⁵ Gemma-4-12B replaces Gemma-3-12B (IPEX-LLM baseline: 10.5 tok/s gen, 240 tok/s prefill). Gemma-4 is +8% faster on generation and +14% on prefill despite running without Flash Attention.
+
+#### Flash Attention validation on Arc 140V ✅
+
+`-fa on` tested on 4 models. **Result: FA is counterproductive on Xe2 with the current SYCL backend — do not use.**
+
+| Model | Prefill (FA off) | Prefill (FA on) | Δ prefill | Gen (FA off) | Gen (FA on) | Δ gen |
+|---|---|---|---|---|---|---|
+| qwen2.5-coder-7b | 479 | 329 | −31% | 19.42 | 19.97 | +3% |
+| qwen3-8b | 323 | 228 | −29% | 15.25 | 17.73 | +16% |
+| llama3.1-8b | 358 | 375 | **+5%** | 18.87 | 19.32 | +2% |
+| qwen3-14b | 225 | 174 | −23% | 10.09 | **6.08** | **−40%** ⚠️ |
+
+Llama 3.1 is the only model with a positive prefill delta (+5%), but the gain is too small (17 tok/s) to justify FA across the board.
+
+Qwen3-14B generation collapses from 10.09 to 6.08 tok/s with FA on. This is likely memory pressure: the model uses 8.38 GiB plus FA intermediate buffers, pushing against the available GPU pool and causing the xe driver to spill.
+
+The prefill gap vs IPEX-LLM (e.g. qwen3-8b: 323 vs 522 tok/s) is an open gap. IPEX-LLM shipped Intel-patched Xe-specific FA kernels that were never upstreamed into llama.cpp — there is no equivalent in the current SYCL backend.
 
 **Baseline reference — IPEX-LLM (Q4\_K\_M, Arc 140V, CTX=8192, Flash Attention on):**
 
