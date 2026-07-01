@@ -410,7 +410,7 @@ hf download unsloth/Qwen3-8B-GGUF \
 
 ---
 
-## 8. Model management and benchmarking ⚠️
+## 8. Model management and benchmarking ✅
 
 ### 8.1 Verify GPU inference
 
@@ -542,32 +542,83 @@ The prefill gap vs IPEX-LLM (e.g. qwen3-8b: 323 vs 522 tok/s) is an open gap. IP
 | gemma3:12b | 10.5 | 240 | 100 ms |
 | qwen2.5:14b-instruct | 10.7 | 451 | 100 ms |
 
-### 8.4 Speculative decoding ⚠️
+### 8.4 Speculative decoding ✅ (validated — not viable on this hardware)
 
 Speculative decoding uses a small "draft" model to generate candidate tokens, which a larger "target" model verifies in a single forward pass. When the draft's predictions are correct, multiple tokens are confirmed at once — multiplying generation throughput without changing output quality.
 
-Two draft mechanisms are supported by llama.cpp:
+Two draft mechanisms exist in principle; only one is usable with llama.cpp upstream:
 
-- **MTP head** — a tiny secondary prediction head (~100–465 MB) trained as part of the target model. Higher acceptance rates, minimal memory overhead. Loaded via `--draft-model` just like a full model.
-- **Separate draft model** — a full smaller model of the same architecture family (same tokenizer required).
+- **Separate draft model** ✅ — a full smaller model of the same architecture family (same tokenizer required). Supported via `--spec-draft-model` + `--spec-type draft-simple` (see root cause below).
+- **MTP head** ❌ — a tiny secondary prediction head trained as part of the target model. The Gemma-4 MTP heads from bartowski/unsloth use `Gemma4Assistant` architecture and require `ctx_other` (the main model's internal context) — they **cannot be loaded as an independent draft model** in llama.cpp upstream (build 9843). The server silently ignores them and falls back to no speculative decoding.
 
-#### Draft availability — current lineup
+#### Root cause of every early "0/0 accepted" result: missing `--spec-type`
 
-| Target | Draft | Type | Draft size | Combined VRAM | Needs download |
+`--spec-draft-model` alone does **not** activate speculative decoding. llama.cpp build 9843 requires an explicit `--spec-type draft-simple` flag to register the implementation (`common/speculative.cpp:2145-2345`, `common/arg.cpp:3769`). Without it, the internal `impls` list stays empty and the server silently logs:
+
+```
+no implementations specified for speculative decoding
+```
+
+`/props` then reports `"speculative.types": "none"` with no error to the client — indistinguishable from a real incompatibility unless you check the server log at `-lv 5`. This masked the true cause of the DeepSeek-R1 and Gemma-4 MTP failures below for most of the investigation; the vocab-mismatch and `ctx_other` issues are real, but `--spec-type` was *also* missing in every one of those tests.
+
+#### Draft availability — current lineup (final status)
+
+| Target | Draft | Type | Draft size | Combined VRAM | Status |
 |---|---|---|---|---|---|
-| Gemma-4-12B (7.12 GiB) | `mtp-gemma-4-12B-it-Q4_0` | MTP head | 0.32 GiB | **7.44 GiB** | ✅ yes |
-| Gemma-4-E4B (4.62 GiB) | `mtp-gemma-4-E4B-it` | MTP head | 0.10 GiB | **4.72 GiB** | ✅ yes |
-| DeepSeek-R1-7B (4.36 GiB) | DeepSeek-R1-Distill-Qwen-1.5B | Separate model | 1.1 GiB | **5.46 GiB** | ✅ yes |
-| Qwen2.5-Coder-14B (8.37 GiB) | Qwen2.5-Coder-7B | Separate model | 4.36 GiB | 12.73 GiB | already downloaded |
-| Qwen3-14B *(optional)* (8.38 GiB) | Qwen3-8B | Separate model | 4.86 GiB | 13.24 GiB | already downloaded |
+| Gemma-4-12B (7.12 GiB) | `mtp-gemma-4-12B-it-Q4_0` | MTP head | 0.32 GiB | 7.44 GiB | ❌ arch incompatible (`ctx_other`) |
+| Gemma-4-E4B (4.62 GiB) | `mtp-gemma-4-E4B-it` | MTP head | 0.10 GiB | 4.72 GiB | ❌ arch incompatible (`ctx_other`) |
+| DeepSeek-R1-7B (4.36 GiB) | DeepSeek-R1-Distill-Qwen-1.5B | Separate model | 1.1 GiB | 5.46 GiB | ❌ vocab mismatch (152064 ≠ 151936) |
+| Gemma-4-12B (7.12 GiB) | Gemma-4-E2B-it Q4_K_M | Separate model | 3.1 GiB | ~10.8 GiB | ⚠️ activates, net regression (see below) |
+| Qwen3-14B (8.38 GiB) | Qwen3-8B | Separate model | 4.86 GiB | 13.24 GiB | ⚠️ activates, net regression (see below) |
 
-Models without a draft option: Phi-4-mini (too small, not needed), Llama-3.1-8B (no compatible small Llama 3.1), Ornith-1.0-9B (unique qwen35 architecture, no public draft).
+Models without a draft option: Phi-4-mini (too small, not needed), Llama-3.1-8B (no compatible small Llama 3.1), Ornith-1.0-9B (unique architecture, no public draft).
 
-> **Why MTP heads are preferred:** trained specifically against the target model's internal representations → higher acceptance rates than a generic smaller model. The Gemma-4 MTP heads from bartowski/unsloth are the only MTP-enabled models in this lineup.
+> **Gemma-4 MTP heads** (`Gemma4Assistant` architecture): require `ctx_other` — the main model's internal context — and cannot be loaded as independent draft models via `--spec-draft-model`. Waiting for native MTP support upstream.
 >
-> **Why coding benefits most from separate drafts:** code generation has higher token predictability (indentation, keywords, variable names) → draft acceptance rates of 60–80%. The Qwen3-14B pair also activates the only concrete use case for keeping that optional model.
+> **DeepSeek-R1 vocab mismatch**: the bartowski 1.5B (`n_vocab = 151936`) and 7B (`n_vocab = 152064`) have different vocabulary sizes — 128 extra tokens in the 7B. llama.cpp requires identical vocabularies for speculative decoding. The 1.5B is tokenizer-compatible with the Qwen3 models (both 151936) but not with the DeepSeek-R1 7B bartowski quant.
 >
-> **DeepSeek-R1 pair:** both 1.5B and 7B are distillations from the same R1 teacher model using Qwen2 architecture and identical tokenizer — exceptionally high acceptance rates expected.
+> **Gemma-4-E2B + Gemma-4-12B**: vocabulary confirmed identical (`n_vocab = 262144` in both — same Gemma-4 tokenizer family, verified via `config.json` and GGUF `tokenizer.ggml.tokens` count). With the correct `--spec-type draft-simple` flag the draft activates and tokens are accepted, but net throughput is *worse* than baseline (see benchmark results below).
+>
+> **Qwen3-14B + Qwen3-8B**: vocabulary confirmed identical (`n_vocab = 151936` in both). Highest acceptance rate observed (64%), but still a net regression — same conclusion as Gemma.
+
+#### Benchmark results — speculative decoding vs baseline
+
+| Pair | `--spec-draft-n-max` | Gen avg | Baseline (§8.3, no spec) | Δ | Acceptance |
+|---|---|---|---|---|---|
+| Gemma-4-E2B → Gemma-4-12B | 16 | 2.25 tok/s | 11.34 tok/s | **−80%** | 15% (collapsing 33%→9% across runs) |
+| Gemma-4-E2B → Gemma-4-12B | 4 | 6.18 tok/s | 11.34 tok/s | **−45%** | 28% (stable) |
+| Qwen3-8B → Qwen3-14B | 4 | 6.21 tok/s | 10.09 tok/s | **−38%** | 64% (stable) |
+
+**Verdict: speculative decoding is not viable on Arc 140V for any tested pair, regardless of vocab compatibility or acceptance rate.** Even the best case (Qwen3, 64% acceptance) is a 38% regression. Lowering `--spec-draft-n-max` from 16→4 substantially reduces the loss (less wasted verify compute on rejected batches) but never closes the gap. The bottleneck is structural, not a tuning problem: Lunar Lake's Arc 140V shares LPDDR5x memory bandwidth between CPU and GPU, and running two model forward passes per step (draft generation + target verification) competes for the same constrained bandwidth that already limits single-model generation. There is no idle compute headroom to hide the draft's cost behind, unlike discrete GPUs with separate VRAM bandwidth where speculative decoding typically wins.
+
+This closes §8.4. The commands below are kept for future reference — revisit if this machine is replaced with a discrete-GPU setup or a future Xe driver/iGPU generation changes the memory-bandwidth-sharing behavior.
+
+#### Verifying vocabulary compatibility before attempting speculative decoding
+
+```bash
+# Check n_vocab of two models — they must match exactly
+source /opt/intel/oneapi/setvars.sh --force
+for f in models/target.gguf models/draft.gguf; do
+  echo -n "$f: "
+  ./build/bin/llama-server -m "$f" --vocab-only 2>&1 | grep "n_vocab" | head -1
+done
+```
+
+Or directly from the GGUF metadata without loading:
+
+```bash
+python3 -c "
+import struct, sys
+def gguf_vocab(path):
+    with open(path, 'rb') as f:
+        f.read(4)  # magic
+        f.read(4)  # version
+        n_tensors = struct.unpack('<Q', f.read(8))[0]
+        n_kv = struct.unpack('<Q', f.read(8))[0]
+    print(f'{path}: n_tensors={n_tensors}, n_kv={n_kv}')
+for p in sys.argv[1:]: gguf_vocab(p)
+" models/DeepSeek-R1-Distill-Qwen-7B-Q4_K_M.gguf models/DeepSeek-R1-Distill-Qwen-1.5B-Q4_K_M.gguf
+```
 
 #### Downloading the missing draft models
 
@@ -586,62 +637,114 @@ hf download unsloth/gemma-4-e4b-it-GGUF \
 hf download bartowski/DeepSeek-R1-Distill-Qwen-1.5B-GGUF \
   DeepSeek-R1-Distill-Qwen-1.5B-Q4_K_M.gguf \
   --local-dir ~/llm/llama-cpp-arc/models/
+
+# Gemma-4-E2B (unsloth) — vocab-compatible draft for Gemma-4-12B
+hf download unsloth/gemma-4-e2b-it-GGUF \
+  gemma-4-E2B-it-Q4_K_M.gguf \
+  --local-dir ~/llm/llama-cpp-arc/models/
 ```
 
 #### Starting the server with speculative decoding
 
+> **Flag changes (llama.cpp ≥ build 9800):**
+> - `--draft-model` and `--draft-max` have been removed. Use `--spec-draft-model` and `--spec-draft-n-max` instead.
+> - `--spec-draft-model` alone does **not** activate speculative decoding — you must also pass `--spec-type draft-simple` to register the implementation, or the server silently falls back to `speculative.types: none` with no error (see root cause above). This was the actual reason every pair below showed `0/0 accepted` before this flag was found.
+
 ```bash
 cd ~/llm/llama-cpp-arc/llama.cpp
 
-# Gemma-4-12B + MTP head (most efficient: only 0.32 GiB overhead)
+# Gemma-4-12B + MTP head — NOT VIABLE: Gemma4Assistant requires ctx_other,
+# cannot be loaded as an independent --spec-draft-model. Kept for reference
+# only; will fail to load regardless of --spec-type.
 ./build/bin/llama-server \
   -m ../models/gemma-4-12B-it-Q4_K_M.gguf \
-  --draft-model ../models/mtp-gemma-4-12B-it-Q4_0.gguf \
-  --draft-max 8 \
+  --spec-type draft-simple \
+  --spec-draft-model ../models/mtp-gemma-4-12B-it-Q4_0.gguf \
+  --spec-draft-n-max 8 \
+  --spec-draft-ngl 999 \
   -ngl 999 --port 8080
 
-# DeepSeek-R1-7B + 1.5B draft (reasoning tasks)
+# Gemma-4-E4B + MTP head — same ctx_other incompatibility as above
+./build/bin/llama-server \
+  -m ../models/gemma-4-E4B-it-Q4_K_M.gguf \
+  --spec-type draft-simple \
+  --spec-draft-model ../models/mtp-gemma-4-E4B-it.gguf \
+  --spec-draft-n-max 8 \
+  --spec-draft-ngl 999 \
+  -ngl 999 --port 8080
+
+# DeepSeek-R1-7B + 1.5B draft — NOT VIABLE: vocab mismatch (152064 ≠ 151936)
 ./build/bin/llama-server \
   -m ../models/DeepSeek-R1-Distill-Qwen-7B-Q4_K_M.gguf \
-  --draft-model ../models/DeepSeek-R1-Distill-Qwen-1.5B-Q4_K_M.gguf \
-  --draft-max 8 \
+  --spec-type draft-simple \
+  --spec-draft-model ../models/DeepSeek-R1-Distill-Qwen-1.5B-Q4_K_M.gguf \
+  --spec-draft-n-max 8 \
+  --spec-draft-ngl 999 \
   -ngl 999 --port 8080
 
-# Qwen2.5-Coder-14B + 7B draft (coding agent — both already downloaded)
+# Gemma-4-12B + Gemma-4-E2B draft — ACTIVATES, net regression on this hardware
+# (see §8.4 benchmark table). --parallel 1 required: with the default 4 slots
+# kv_unified=true and the draft is silently ignored.
 ./build/bin/llama-server \
-  -m ../models/Qwen2.5-Coder-14B-Instruct-Q4_K_M.gguf \
-  --draft-model ../models/Qwen2.5-Coder-7B-Instruct-Q4_K_M.gguf \
-  --draft-max 8 \
-  -ngl 999 --port 8080
+  -m ../models/gemma-4-12B-it-Q4_K_M.gguf \
+  --spec-type draft-simple \
+  --spec-draft-model ../models/gemma-4-E2B-it-Q4_K_M.gguf \
+  --spec-draft-n-max 4 \
+  --spec-draft-ngl 999 \
+  -ngl 999 --parallel 1 --port 8080
+
+# Qwen3-14B + Qwen3-8B draft — ACTIVATES, net regression on this hardware
+# (see §8.4 benchmark table). Combined 13.24 GiB — requires fresh GPU pool.
+./build/bin/llama-server \
+  -m ../models/Qwen3-14B-Q4_K_M.gguf \
+  --spec-type draft-simple \
+  --spec-draft-model ../models/Qwen3-8B-Q4_K_M.gguf \
+  --spec-draft-n-max 4 \
+  --spec-draft-ngl 999 \
+  -ngl 999 --parallel 1 --port 8080
 ```
 
 | Parameter | Description |
 |---|---|
-| `--draft-model` | Path to MTP head or draft model — same flag for both types |
-| `--draft-max` | Max speculative tokens per step — start with 8, tune based on acceptance rate |
+| `--spec-type draft-simple` | **Required** to activate a separate-model draft. Without it, `--spec-draft-model` is loaded into VRAM but never used (see root cause above) |
+| `--spec-draft-model` | Path to draft model (replaces removed `--draft-model`) |
+| `--spec-draft-n-max` | Max speculative tokens per step — default 3. On Arc 140V, 4 minimizes wasted verify compute versus higher values like 8–16 (§8.4 benchmark table) |
+| `--spec-draft-ngl` | GPU layers for the draft model — set to 999 to keep draft on GPU |
+| `--parallel 1` | Required for speculative decoding to activate at all — with the server default of 4 slots, `kv_unified=true` and the draft is silently ignored |
 
 #### Benchmarking speculative decoding vs baseline
 
+`llama-bench` does not support draft models — benchmarking must go through `llama-server`.
+Start the server with `--spec-type draft-simple` + `--spec-draft-model` (see commands above),
+then use `bench-spec.sh` to drive the `/completion` endpoint and average `timings.predicted_per_second`
+across multiple runs:
+
 ```bash
+# 1. Start the server (in a separate terminal) — example: Qwen3 pair
 cd ~/llm/llama-cpp-arc/llama.cpp
+source /opt/intel/oneapi/setvars.sh --force
+export GGML_SYCL_DEVICE=0 SYCL_CACHE_PERSISTENT=0 ZES_ENABLE_SYSMAN=1
 
-# Example: Gemma-4-12B with MTP head
-# Baseline
-./build/bin/llama-bench \
-  -m ../models/gemma-4-12B-it-Q4_K_M.gguf \
-  -p 512 -n 128 -ngl 999 --output md
+./build/bin/llama-server \
+  -m ../models/Qwen3-14B-Q4_K_M.gguf \
+  --spec-type draft-simple \
+  --spec-draft-model ../models/Qwen3-8B-Q4_K_M.gguf \
+  --spec-draft-n-max 4 \
+  --spec-draft-ngl 999 \
+  -ngl 999 --parallel 1 --port 8080
 
-# With MTP speculative decoding
-./build/bin/llama-bench \
-  -m ../models/gemma-4-12B-it-Q4_K_M.gguf \
-  --draft-model ../models/mtp-gemma-4-12B-it-Q4_0.gguf \
-  --draft-max 8 \
-  -p 512 -n 128 -ngl 999 --output md
+# 2. Measure gen tok/s (in another terminal) — averages 3 runs by default
+cd ~/llm/llama-cpp-arc
+./bench-spec.sh -n 3
 ```
 
-Compare `tg128` against the §8.3 baseline for each target model. The bench output includes draft acceptance rate metrics.
+Compare `Avg gen` against the §8.3 llama-bench baseline (`tg128`) for the target model.
+`Acceptance` (`draft_n_accepted / draft_n`) is the fraction of drafted tokens confirmed —
+higher means more potential speedup, but as shown in the §8.4 results table, a high acceptance
+rate does **not** guarantee a net win if the draft model's own compute cost outweighs the
+tokens it saves.
 
-> **Tuning `--draft-max`:** higher values increase potential speedup but waste work on rejected tokens. 8 is a safe default; try 4–16 to find the value that maximises effective tok/s. When running as a server, the `/metrics` endpoint reports the live acceptance rate.
+> **Diagnosing `0/0 accepted`:** if `bench-spec.sh` reports `accepted: 0/0` with the flags above, check the server log (start with `-lv 5`) for `adding speculative implementation 'draft-simple'` and `speculative decoding context initialized`. If instead you see `no implementations specified for speculative decoding`, verify: `--spec-type draft-simple` is present, `--parallel 1` is set (not the default 4 slots), and both models report identical `n_vocab` (§8.4 vocab verification snippet above).
 
 ---
 
