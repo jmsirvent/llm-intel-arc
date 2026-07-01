@@ -1,11 +1,21 @@
 #!/usr/bin/env bash
-# drop-caches.sh — Release GPU and system memory between llama-bench runs.
+# drop-caches.sh — Release system RAM between llama-bench runs.
 #
-# The xe driver retains GPU memory pages after a model is unloaded and does
-# not return them to the system until explicitly asked. This script:
-#   1. Drops page cache, dentries and inodes (echo 3 > /proc/sys/vm/drop_caches)
+# What this script does:
+#   1. Drops Linux page cache, dentries and inodes (echo 3 > /proc/sys/vm/drop_caches)
 #   2. Cycles swap to recover any swap-backed pages
-# Both require sudo. Run between model loads to get a clean memory baseline.
+# Both steps require sudo.
+#
+# What this script does NOT do:
+#   - It does not free GPU memory. The xe driver (Lunar Lake / Xe2) manages its
+#     own memory pool independently of the Linux page cache. When llama-server
+#     exits, the xe driver retains the allocated pages in the GPU pool rather
+#     than returning them to the system immediately. drop_caches has no effect
+#     on this pool. GPU memory shown by xpu-smi after stopping the server
+#     includes those retained pages plus the Wayland compositor (~1-2 GiB,
+#     permanent while a desktop session is running).
+#   - To fully recover GPU memory: reboot. There is no userspace command to
+#     force the xe driver to flush its pool without reloading the kernel module.
 
 set -euo pipefail
 
