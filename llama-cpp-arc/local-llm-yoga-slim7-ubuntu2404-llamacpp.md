@@ -322,6 +322,8 @@ There is no fixed "available for models" figure — free memory on this unified-
 
 > ⚠️ **xe driver behavior:** once the xe driver assigns RAM pages to the GPU pool (on first model load), it does not return them to the system even if the model is unloaded. Memory is only fully recovered with a reboot or `echo 3 > /proc/sys/vm/drop_caches` after stopping the server.
 
+> **GPU pool allocation causes real (if minor) swap activity, not a `vm.swappiness` misconfiguration:** loading a model triggers brief swap-out bursts (observed: ~130 MB across two bursts while loading Qwen3-8B) as the kernel reclaims RSS from page cache/applications to satisfy the unified-memory allocation for the GPU. `swappiness = 10` (§11) reduces the tendency to swap but does not prevent it under genuine memory pressure — this is expected, not a bug. To tell transient allocation swap from real memory pressure, check `vmstat`'s `si`/`so` columns for active in/out traffic rather than the total swap-used figure from `free -h`, which persists from past peaks until something touches those pages again (or until `echo 3 > /proc/sys/vm/drop_caches`, which also lets the kernel swap idle pages back in once memory is freed).
+
 ### 7.1 Recommended models (GGUFs from Hugging Face)
 
 Always use verified publishers. Two categories are acceptable:
@@ -881,7 +883,7 @@ Two configuration files that improve inference stability and performance. Indepe
 ```bash
 sudo tee /etc/sysctl.d/99-llm-performance.conf > /dev/null <<'EOF'
 # Memory
-vm.swappiness = 10               # Avoid swap with 30 GB of available RAM
+vm.swappiness = 10               # Reduce swap tendency (32 GB total, but free RAM varies — see §7)
 vm.dirty_background_ratio = 5    # Flush writes at 5%
 vm.dirty_ratio = 15
 vm.vfs_cache_pressure = 50       # Retain inode/dentry cache — faster model loads
@@ -901,7 +903,6 @@ sudo sysctl -p /etc/sysctl.d/99-llm-performance.conf
 sudo tee /etc/systemd/system/cpu-performance.service > /dev/null <<'EOF'
 [Unit]
 Description=CPU performance governor and HWP dynamic boost
-After=multi-user.target
 Before=llama-server.service
 
 [Service]
@@ -917,7 +918,7 @@ EOF
 sudo systemctl daemon-reload && sudo systemctl enable --now cpu-performance.service
 ```
 
-> **`Before=llama-server.service`:** the governor must be active before the server starts compiling SYCL kernels on first boot.
+> **`Before=llama-server.service`:** the governor must be active before the server starts compiling SYCL kernels on first boot. No `After=multi-user.target` is needed (or correct) here: paired with `WantedBy=multi-user.target` it would be an ordering cycle (same bug fixed in §10) — `cpufreq` sysfs paths are available from early boot regardless, and the `Before=` relation already guarantees this unit runs ahead of `llama-server.service`.
 
 Verification:
 
