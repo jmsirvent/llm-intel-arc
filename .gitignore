@@ -1,6 +1,9 @@
 # Claude Code session artifacts
 .remember/
 
+# Debug logs / scratch dumps (server logs pasted during investigations)
+raw/
+
 # Python
 __pycache__/
 *.py[cod]
