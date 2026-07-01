@@ -42,8 +42,10 @@ VS Code (Twinny / Cline / Roo Code) · Open WebUI · Python scripts
 | oneAPI — icx/icpx + MKL | ✅ Validated |
 | llama.cpp SYCL build | ✅ Validated |
 | llama-server validated on Arc 140V | ✅ Validated |
-| Benchmarks vs IPEX-LLM | ⏳ Pending |
-| Speculative decoding | ⏳ Pending |
+| Benchmarks vs IPEX-LLM | ✅ Validated (prefill gap on some models remains open — §8.3) |
+| Speculative decoding | ✅ Validated — not viable on this hardware (§8.4) |
+| VS Code client integration (Twinny/Cline) | ✅ Validated |
+| Systemd autostart | ⚠️ Corrected, untested against a real reboot (§10) |
 
 ## Quick start (once built)
 
