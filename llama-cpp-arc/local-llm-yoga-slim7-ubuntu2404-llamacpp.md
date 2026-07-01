@@ -254,7 +254,7 @@ export ZES_ENABLE_SYSMAN=1
 cd ~/llm/llama-cpp-arc/llama.cpp
 
 ./build/bin/llama-server \
-  -m ../models/llama3.1-8b-instruct-q4_k_m.gguf \
+  -m ../models/Meta-Llama-3.1-8B-Instruct-Q4_K_M.gguf \
   --port 8080 \
   --host 0.0.0.0 \
   --n-gpu-layers 999 \
@@ -288,43 +288,19 @@ Every startup compiles SYCL kernels JIT for the Arc 140V Xe2 — this takes **2�
 
 ### 6.4 Startup script
 
-Create `~/llm/llama-cpp-arc/start-server.sh`:
-
-```bash
-#!/usr/bin/env bash
-set -euo pipefail
-
-# Project directory
-LLAMACPP_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/llama.cpp" && pwd)"
-MODELS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/models" && pwd)"
-
-# Activate oneAPI
-source /opt/intel/oneapi/setvars.sh --force
-
-# SYCL variables
-export GGML_SYCL_DEVICE=0
-export SYCL_CACHE_PERSISTENT=0  # workaround intel/llvm#21972 — see TODO.md
-export ZES_ENABLE_SYSMAN=1
-
-# Default model (pass as argument to override)
-MODEL="${1:-${MODELS_DIR}/llama3.1-8b-instruct-q4_k_m.gguf}"
-
-exec "${LLAMACPP_DIR}/build/bin/llama-server" \
-  -m "${MODEL}" \
-  --port 8080 \
-  --host 0.0.0.0 \
-  --n-gpu-layers 999 \
-  --ctx-size 8192 \
-  --parallel 1
-```
+`~/llm/llama-cpp-arc/start-server.sh` is an interactive launcher, not a fixed one-model script. It shares the same model catalog as `benchmark.sh` (§7.1 lineup) and, with no arguments, shows a menu listing every model in the catalog: available ones (✓, ready to start) and not-yet-downloaded ones (✗, with a ready-to-run `hf download` command and an interactive download prompt). Selecting an available model starts `llama-server` with the baseline params from §6.2 (`--n-gpu-layers 999 --ctx-size 8192 --parallel 1 --port 8080`).
 
 ```bash
 chmod +x ~/llm/llama-cpp-arc/start-server.sh
 
 # Usage
-./start-server.sh                                          # default model
-./start-server.sh models/qwen3-8b-q4_k_m.gguf            # specific model
+./start-server.sh                             # interactive menu
+./start-server.sh Qwen3-8B-Q4_K_M.gguf        # start a specific GGUF by filename
+./start-server.sh Gemma                       # match by display-name substring
+./start-server.sh models/Qwen3-8B-Q4_K_M.gguf # explicit path (back-compat)
 ```
+
+See the script itself for the full implementation — the catalog, download-prompt, and menu logic mirror `benchmark.sh` (§8.3) exactly, so both scripts should be updated together when the model lineup changes.
 
 ---
 
@@ -919,7 +895,7 @@ clinfo -l
 ./start-server.sh
 
 # Start with specific model
-./start-server.sh models/qwen3-8b-q4_k_m.gguf
+./start-server.sh models/Qwen3-8B-Q4_K_M.gguf
 
 # Verify server responds
 curl http://localhost:8080/health

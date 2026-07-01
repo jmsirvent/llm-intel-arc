@@ -61,16 +61,16 @@ sep()    { printf '%.0s─' {1..60}; echo; }
 # Ollama-derived symlinks use lowercase; HF downloads preserve original case.
 
 CATALOG=(
-  "Phi-4-mini-Instruct Q4_K_M|phi4-mini-q4_k_m.gguf|bartowski/Phi-4-mini-Instruct-GGUF|Phi-4-mini-Instruct-Q4_K_M.gguf|2.5 GB"
+  "Phi-4-mini-Instruct Q4_K_M|microsoft_Phi-4-mini-instruct-Q4_K_M.gguf|bartowski/microsoft_Phi-4-mini-instruct-GGUF|microsoft_Phi-4-mini-instruct-Q4_K_M.gguf|2.5 GB"
   "Gemma-4-E4B Q4_K_M|gemma-4-E4B-it-Q4_K_M.gguf|unsloth/gemma-4-e4b-it-GGUF|gemma-4-E4B-it-Q4_K_M.gguf|4.9 GB"
   "DeepSeek-R1-Distill-Qwen-7B Q4_K_M|DeepSeek-R1-Distill-Qwen-7B-Q4_K_M.gguf|bartowski/DeepSeek-R1-Distill-Qwen-7B-GGUF|DeepSeek-R1-Distill-Qwen-7B-Q4_K_M.gguf|4.7 GB"
   "Qwen2.5-Coder-7B-Instruct Q4_K_M|Qwen2.5-Coder-7B-Instruct-Q4_K_M.gguf|bartowski/Qwen2.5-Coder-7B-Instruct-GGUF|Qwen2.5-Coder-7B-Instruct-Q4_K_M.gguf|4.7 GB"
-  "Llama-3.1-8B-Instruct Q4_K_M|llama3.1-8b-instruct-q4_k_m.gguf|bartowski/Meta-Llama-3.1-8B-Instruct-GGUF|Meta-Llama-3.1-8B-Instruct-Q4_K_M.gguf|4.9 GB"
-  "Qwen3-8B Q4_K_M|qwen3-8b-q4_k_m.gguf|unsloth/Qwen3-8B-GGUF|Qwen3-8B-Q4_K_M.gguf|5.2 GB"
+  "Llama-3.1-8B-Instruct Q4_K_M|Meta-Llama-3.1-8B-Instruct-Q4_K_M.gguf|bartowski/Meta-Llama-3.1-8B-Instruct-GGUF|Meta-Llama-3.1-8B-Instruct-Q4_K_M.gguf|4.9 GB"
+  "Qwen3-8B Q4_K_M|Qwen3-8B-Q4_K_M.gguf|unsloth/Qwen3-8B-GGUF|Qwen3-8B-Q4_K_M.gguf|5.2 GB"
   "Gemma-4-12B Q4_K_M|gemma-4-12B-it-Q4_K_M.gguf|bartowski/gemma-4-12b-it-GGUF|gemma-4-12B-it-Q4_K_M.gguf|7.7 GB"
   "Ornith-1.0-9B Q6_K|ornith-1.0-9b-Q6_K.gguf|deepreinforce-ai/Ornith-1.0-9B-GGUF|ornith-1.0-9b-Q6_K.gguf|7.4 GB"
   "Qwen3-14B Q4_K_M (optional)|Qwen3-14B-Q4_K_M.gguf|unsloth/Qwen3-14B-GGUF|Qwen3-14B-Q4_K_M.gguf|9.0 GB"
-  "Qwen2.5-Coder-14B-Instruct Q4_K_M|qwen2.5-coder-14b-q4_k_m.gguf|bartowski/Qwen2.5-Coder-14B-Instruct-GGUF|Qwen2.5-Coder-14B-Instruct-Q4_K_M.gguf|9.0 GB"
+  "Qwen2.5-Coder-14B-Instruct Q4_K_M|Qwen2.5-Coder-14B-Instruct-Q4_K_M.gguf|bartowski/Qwen2.5-Coder-14B-Instruct-GGUF|Qwen2.5-Coder-14B-Instruct-Q4_K_M.gguf|9.0 GB"
 )
 
 # ── Environment setup ─────────────────────────────────────────────────────────
