@@ -279,6 +279,7 @@ curl -s http://localhost:8080/v1/chat/completions \
 | `--parallel` | 1 | Explicit single-user — avoids reserving buffers for parallel requests |
 | `--port` | 8080 | API port for this server |
 | `--host` | 0.0.0.0 | Listen on all interfaces |
+| `--skip-chat-parsing` | (add when needed) | Forces everything (including chain-of-thought) into `message.content` instead of splitting it into `message.reasoning_content`. Needed with reasoning models (Ornith, Qwen3, DeepSeek-R1) when the client doesn't read `reasoning_content` — see §9.2. |
 
 ### 6.3 First model load
 
@@ -301,6 +302,10 @@ chmod +x ~/llm/llama-cpp-arc/start-server.sh
 ```
 
 See the script itself for the full implementation — the catalog, download-prompt, and menu logic mirror `benchmark.sh` (§8.3) exactly, so both scripts should be updated together when the model lineup changes.
+
+> **`OCL_ICD_FILENAMES: variable sin asignar` on startup:** Intel's `setvars.sh` references unset variables internally; under this script's `set -euo pipefail`, that aborts the whole script before `llama-server` ever starts (symptom: nothing listens on `:8080`, and any OpenAI-compatible client — e.g. Twinny — just hangs waiting for a connection). Fixed by bracketing the `source` call with `set +u` / `set -u`, since `set -u` errors are fatal even inside a `||` guard (unlike `set -e`, they are not suppressed by `&&`/`||` context). Same fix applied in `benchmark.sh`.
+
+> **`missing_names: variable sin asignar` in the menu:** happens when every catalog model is already downloaded (the "Not downloaded" list stays empty). Under `set -u`, `local -a arr` alone does **not** count as "set" for `${#arr[@]}` — only an explicit `arr=()` assignment does; an untouched local array reference aborts the script. Fixed by declaring every local array with `=()` (`local -a missing_names=() ...`). Same fix applied in `benchmark.sh`.
 
 ---
 
@@ -748,7 +753,7 @@ tokens it saves.
 
 ---
 
-## 9. Integration with external tools ⚠️
+## 9. Integration with external tools ✅
 
 The llama-server endpoint is compatible with the OpenAI spec. The difference from the IPEX-LLM stack is the port (`8080` instead of `11434`) and the absence of a model registry — the model is specified when starting the server, not when calling the API.
 
@@ -765,17 +770,23 @@ The llama-server endpoint is compatible with the OpenAI spec. The difference fro
 
 #### Twinny — inline autocomplete + chat
 
+Twinny 3.x manages providers through its own UI, not `settings.json` — open the command palette and run **"Twinny: Manage Providers"**, then add a provider with these values (verified working):
+
 | Setting | Value |
 |---|---|
-| API hostname | `localhost` |
-| API port | `8080` |
-| Fill-in-middle model | `phi4-mini` (or the name shown in `/v1/models`) |
-| Chat model | `qwen3:8b` |
-| API provider | `llamacpp` or `OpenAI Compatible` |
+| Type | `chat` (add a second provider with type `fim` for autocomplete) |
+| Provider | `OpenAI Compatible` |
+| Protocol | `http` |
+| Hostname | `localhost` |
+| Port | `8080` |
+| Path | `/v1` |
+| Model | the exact filename of the GGUF currently loaded by `llama-server` (check `/v1/models`) |
 
-> ⚠️ Verify what `model` value Twinny accepts when the backend is llama-server (the field may require the GGUF filename or any string depending on the version).
+> **One model at a time:** unlike Ollama, `llama-server` only serves the single GGUF it was started with. FIM and Chat providers must point to the *same* model unless you run two `llama-server` instances on two different ports (doubles memory use — see the variable budget in §7). The "Phi-4-mini for FIM / Qwen3-8B for chat" split only works with that two-instance setup.
 
-#### Cline / Roo Code — coding agent
+> **Blank chat responses with reasoning models:** Ornith, Qwen3, and DeepSeek-R1 split their chain-of-thought into `message.reasoning_content`, separate from `message.content` — Twinny only reads `content`, so if the model's reasoning doesn't finish before hitting `max_tokens`, the panel shows nothing. Fix: add `--skip-chat-parsing` to the server params (§6.2) — forces everything, including the reasoning trace, into `content`.
+
+#### Cline — coding agent
 
 | Setting | Value |
 |---|---|
@@ -821,7 +832,7 @@ print(response.choices[0].message.content)
 sudo tee /etc/systemd/system/llama-server.service > /dev/null <<'EOF'
 [Unit]
 Description=llama-server SYCL (Intel Arc 140V)
-After=multi-user.target
+After=network-online.target
 Wants=network-online.target
 
 [Service]
@@ -829,13 +840,12 @@ Type=simple
 User=YOUR_USER
 WorkingDirectory=/home/YOUR_USER/llm/llama-cpp-arc
 
-# Activate oneAPI before starting the server
-ExecStartPre=/bin/bash -c 'source /opt/intel/oneapi/setvars.sh --force'
-ExecStart=/home/YOUR_USER/llm/llama-cpp-arc/start-server.sh
-
-Environment=GGML_SYCL_DEVICE=0
-Environment=SYCL_CACHE_PERSISTENT=1
-Environment=ZES_ENABLE_SYSMAN=1
+# No ExecStartPre / Environment= needed here: start-server.sh sources
+# setvars.sh and exports the SYCL variables itself before exec'ing
+# llama-server (see §6.4). Duplicating that in the unit would be redundant.
+# Explicit model filename required — with no argument, start-server.sh shows
+# the interactive menu, which blocks indefinitely without a TTY under systemd.
+ExecStart=/home/YOUR_USER/llm/llama-cpp-arc/start-server.sh Qwen3-8B-Q4_K_M.gguf
 
 Restart=on-failure
 RestartSec=10s
@@ -856,7 +866,9 @@ sudo systemctl enable --now llama-server.service
 sudo systemctl status llama-server.service
 ```
 
-> ⚠️ **`source` in ExecStartPre:** systemd does not propagate environment variables between directives. It may be necessary to inline the content of `setvars.sh` into the service or use `EnvironmentFile`. The correct way to activate oneAPI in a service unit is pending validation.
+> **oneAPI activation:** no `ExecStartPre` or `Environment=` is needed for SYCL — systemd doesn't propagate environment variables between directives anyway, but that's moot here because `start-server.sh` is self-contained: it sources `setvars.sh` and exports `GGML_SYCL_DEVICE` / `SYCL_CACHE_PERSISTENT` / `ZES_ENABLE_SYSMAN` itself, right before `exec`-ing `llama-server` (§6.4). The unit only needs to invoke the script.
+>
+> **`After=network-online.target`, not `multi-user.target`:** a unit with `WantedBy=multi-user.target` cannot also declare `After=multi-user.target` — that's an ordering cycle (reaching `multi-user.target` would have to wait for this unit, which itself waits for `multi-user.target`). systemd detects and breaks the cycle, silently dropping the intended ordering. Since the unit already declares `Wants=network-online.target`, `After=` must reference that same target.
 
 ---
 
