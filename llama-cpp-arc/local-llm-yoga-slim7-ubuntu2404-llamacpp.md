@@ -289,7 +289,7 @@ Every startup compiles SYCL kernels JIT for the Arc 140V Xe2 — this takes **2�
 
 ### 6.4 Startup script
 
-`~/llm/llama-cpp-arc/start-server.sh` is an interactive launcher, not a fixed one-model script. It shares the same model catalog as `benchmark.sh` (§7.1 lineup) and, with no arguments, shows a menu listing every model in the catalog: available ones (✓, ready to start) and not-yet-downloaded ones (✗, with a ready-to-run `hf download` command and an interactive download prompt). Selecting an available model starts `llama-server` with the baseline params from §6.2 (`--n-gpu-layers 999 --ctx-size 8192 --parallel 1 --port 8080`).
+`~/llm/llama-cpp-arc/start-server.sh` is an interactive launcher, not a fixed one-model script — no need to have read §7.1 or §8.3 first, they're just where the model lineup and `benchmark.sh` (which shares this same catalog) are covered in more depth. With no arguments, it shows a menu listing every model in the catalog: available ones (✓, ready to start) and not-yet-downloaded ones (✗, with a ready-to-run `hf download` command and an interactive download prompt). Selecting an available model starts `llama-server` with the baseline params from §6.2 (`--n-gpu-layers 999 --ctx-size 8192 --parallel 1 --port 8080`).
 
 ```bash
 chmod +x ~/llm/llama-cpp-arc/start-server.sh
@@ -413,7 +413,14 @@ hf download bartowski/Qwen2.5-Coder-14B-Instruct-GGUF \
 hf download unsloth/Qwen3-8B-GGUF \
   Qwen3-8B-Q4_K_M.gguf \
   --local-dir ~/llm/llama-cpp-arc/models
+
+# Download Llama-3.1-8B-Instruct (used as the §6.2 startup example)
+hf download bartowski/Meta-Llama-3.1-8B-Instruct-GGUF \
+  Meta-Llama-3.1-8B-Instruct-Q4_K_M.gguf \
+  --local-dir ~/llm/llama-cpp-arc/models
 ```
+
+The remaining models in the §7.1 lineup follow the same pattern — the "Publisher" column there gives the exact repo id for each.
 
 ---
 
@@ -470,7 +477,7 @@ sudo xpu-smi dump -d 0 -m 0,5,18 -i 1
 watch -n1 'grep -E "MemFree|MemAvailable" /proc/meminfo'
 ```
 
-### 8.3 Benchmark with llama-bench ✅
+### 8.3 Benchmark with llama-bench ⚠️ (validated — one open TODO below)
 
 ```bash
 # Basic benchmark: prefill (512 tokens) + generation (128 tokens)
@@ -537,7 +544,7 @@ Llama 3.1 is the only model with a positive prefill delta (+5%), but the gain is
 
 Qwen3-14B generation collapses from 10.09 to 6.08 tok/s with FA on. This is likely memory pressure: the model uses 8.38 GiB plus FA intermediate buffers, pushing against the available GPU pool and causing the xe driver to spill.
 
-The prefill gap vs IPEX-LLM (e.g. qwen3-8b: 323 vs 522 tok/s) is an open gap. IPEX-LLM shipped Intel-patched Xe-specific FA kernels that were never upstreamed into llama.cpp — there is no equivalent in the current SYCL backend.
+> **TODO (open, not a permanent limitation):** the prefill gap vs IPEX-LLM (e.g. qwen3-8b: 323 vs 522 tok/s) remains unresolved. IPEX-LLM shipped Intel-patched Xe-specific FA kernels that were never upstreamed into llama.cpp — the current SYCL backend has no equivalent. **Reopen this when:** upstream `llama.cpp` merges improved SYCL FA kernels for Xe2, or a new oneAPI release changes SYCL FA performance characteristics — re-run the §8.3 benchmark table against IPEX-LLM's numbers (`benchmark-reference-ipex-llm` memory) at that point to check whether the gap closed.
 
 **Baseline reference — IPEX-LLM (Q4\_K\_M, Arc 140V, CTX=8192, Flash Attention on):**
 
@@ -628,6 +635,10 @@ for p in sys.argv[1:]: gguf_vocab(p)
 ```
 
 #### Downloading the missing draft models
+
+> These were downloaded only to reproduce the speculative-decoding tests below and have since
+> been deleted from `models/` (§8.4's verdict is negative — not part of the active lineup, see
+> §7.1). Re-download only if revisiting speculative decoding after a hardware change.
 
 ```bash
 # Gemma-4-12B MTP head (bartowski — in same repo as the main model)
@@ -723,8 +734,9 @@ cd ~/llm/llama-cpp-arc/llama.cpp
 
 `llama-bench` does not support draft models — benchmarking must go through `llama-server`.
 Start the server with `--spec-type draft-simple` + `--spec-draft-model` (see commands above),
-then use `bench-spec.sh` to drive the `/completion` endpoint and average `timings.predicted_per_second`
-across multiple runs:
+then use `~/llm/llama-cpp-arc/bench-spec.sh` — a small script (not `llama-bench`) that sends
+repeated prompts to the running server's `/completion` endpoint and averages
+`timings.predicted_per_second` and the draft acceptance rate across multiple runs:
 
 ```bash
 # 1. Start the server (in a separate terminal) — example: Qwen3 pair
@@ -985,9 +997,9 @@ source /opt/intel/oneapi/setvars.sh && sycl-ls
 GGML_SYCL_DEVICE=0 ./build/bin/llama-server --list-devices
 ```
 
-### First inference takes 2–5 minutes
+### Every server startup takes 2–5 minutes
 
-Normal behavior. The SYCL runtime compiles kernels for the Arc 140V Xe2 on first use. Compilations are cached in `~/.cache/sycl/` (with `SYCL_CACHE_PERSISTENT=1` active). Subsequent loads are nearly instantaneous.
+Expected with the current workaround, not a one-time cost. `SYCL_CACHE_PERSISTENT` is kept at `0` (§6.1, §6.3) because `=1` triggers a SIGSEGV in `libsycl.so.9` (`intel/llvm#21972`) — with persistence disabled, the SYCL runtime recompiles kernels for the Arc 140V Xe2 JIT on **every** startup, not just the first. There is no working cache to warm up; this stays true until Intel ships a fix and `SYCL_CACHE_PERSISTENT=1` can be re-enabled.
 
 ### RAM is not recovered after stopping the server
 
