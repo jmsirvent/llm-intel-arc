@@ -207,3 +207,51 @@ def test_summarize_error_passthrough(monkeypatch):
     monkeypatch.setattr(server, "_query_model", _fake_query_model(ok=False, error="llama-server is not running"))
     result = server.summarize("text")
     assert "not running" in result
+
+
+def test_switch_model_rejects_unknown_gguf(monkeypatch, tmp_path):
+    (tmp_path / "Qwen3-8B-Q4_K_M.gguf").touch()
+    monkeypatch.setattr(server, "MODELS_DIR", tmp_path)
+
+    result = server.switch_model("Nonexistent-Model.gguf")
+    assert "not found" in result.lower()
+    assert "Qwen3-8B-Q4_K_M.gguf" in result
+
+
+def test_switch_model_launches_start_server(monkeypatch, tmp_path):
+    (tmp_path / "Qwen3-8B-Q4_K_M.gguf").touch()
+    monkeypatch.setattr(server, "MODELS_DIR", tmp_path)
+    monkeypatch.setattr(server, "_find_port_8080_pids", lambda: [1234])
+
+    terminated = []
+    monkeypatch.setattr(server, "_terminate_pids", lambda pids: terminated.extend(pids))
+
+    launched = {}
+
+    class FakePopen:
+        def __init__(self, args, **kwargs):
+            launched["args"] = args
+            launched["kwargs"] = kwargs
+
+    monkeypatch.setattr(server.subprocess, "Popen", FakePopen)
+
+    result = server.switch_model("Qwen3-8B-Q4_K_M.gguf")
+    assert terminated == [1234]
+    assert launched["args"] == [str(server.START_SERVER_SCRIPT), "Qwen3-8B-Q4_K_M.gguf"]
+    assert launched["kwargs"]["start_new_session"] is True
+    assert "switch started" in result.lower()
+    assert "local_model_status" in result
+
+
+def test_switch_model_skips_terminate_when_nothing_bound(monkeypatch, tmp_path):
+    (tmp_path / "Gemma-4-12B.gguf").touch()
+    monkeypatch.setattr(server, "MODELS_DIR", tmp_path)
+    monkeypatch.setattr(server, "_find_port_8080_pids", lambda: [])
+
+    terminated = []
+    monkeypatch.setattr(server, "_terminate_pids", lambda pids: terminated.extend(pids))
+    monkeypatch.setattr(server.subprocess, "Popen", lambda args, **kwargs: None)
+
+    result = server.switch_model("Gemma-4-12B.gguf")
+    assert terminated == []
+    assert "switch started" in result.lower()

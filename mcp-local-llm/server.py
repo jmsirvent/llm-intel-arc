@@ -1,6 +1,9 @@
 """mcp-local-llm — FastMCP stdio server for delegating bounded subtasks
 to the local llama-server (Intel Arc 140V, OpenAI-compatible /v1 surface)."""
 
+import os
+import signal
+import subprocess
 from pathlib import Path
 
 import httpx
@@ -180,6 +183,50 @@ def second_opinion(question: str, context: str | None = None) -> str:
     if not result["ok"]:
         return result["error"]
     return f"{result['content']}\n\n(answered by {result['model']})"
+
+
+def _find_port_8080_pids() -> list[int]:
+    try:
+        output = subprocess.run(
+            ["lsof", "-t", "-i:8080"], capture_output=True, text=True, timeout=5
+        ).stdout
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        return []
+    return [int(pid) for pid in output.split() if pid.strip().isdigit()]
+
+
+def _terminate_pids(pids: list[int]) -> None:
+    for pid in pids:
+        try:
+            os.kill(pid, signal.SIGTERM)
+        except ProcessLookupError:
+            pass
+
+
+@mcp.tool()
+def switch_model(model: str) -> str:
+    """Switch which GGUF llama-server is serving. Validates against the
+    on-disk catalog, stops the current server, and starts the new one in
+    the background — this does NOT block, because loading a model takes
+    2-5 minutes (JIT kernel recompilation on this hardware). Poll
+    local_model_status to see when the new model is ready."""
+    catalog = sorted(p.name for p in MODELS_DIR.glob("*.gguf")) if MODELS_DIR.exists() else []
+    if model not in catalog:
+        catalog_text = "\n".join(f"  - {name}" for name in catalog) or "  (none found)"
+        return f"'{model}' not found in the on-disk catalog. Available GGUFs:\n{catalog_text}"
+
+    pids = _find_port_8080_pids()
+    if pids:
+        _terminate_pids(pids)
+
+    subprocess.Popen(
+        [str(START_SERVER_SCRIPT), model],
+        start_new_session=True,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+
+    return f"Switch started for '{model}' — this takes 2-5 minutes. Poll local_model_status to check readiness."
 
 
 if __name__ == "__main__":
