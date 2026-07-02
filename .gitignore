@@ -1,5 +1,6 @@
 # Claude Code session artifacts
 .remember/
+.worktrees/
 
 # Debug logs / scratch dumps (server logs pasted during investigations)
 raw/
