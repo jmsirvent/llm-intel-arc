@@ -122,5 +122,22 @@ def local_model_status() -> str:
     return f"llama-server is running. Loaded model: {loaded}\n\nOn-disk GGUF catalog:\n{catalog_text}"
 
 
+@mcp.tool()
+def ask_local_model(
+    prompt: str,
+    system: str | None = None,
+    max_tokens: int = DEFAULT_MAX_TOKENS,
+    temperature: float = 0.7,
+) -> str:
+    """Generic fallback: send any prompt to the local model. Use this when
+    the task doesn't fit summarize/draft_code/second_opinion — e.g. a
+    privacy-sensitive question that must not leave this machine, or a
+    one-off request that doesn't warrant a dedicated tool."""
+    result = _query_model(prompt, system=system, max_tokens=max_tokens, temperature=temperature)
+    if not result["ok"]:
+        return result["error"]
+    return f"{result['content']}\n\n(answered by {result['model']})"
+
+
 if __name__ == "__main__":
     mcp.run(transport="stdio")

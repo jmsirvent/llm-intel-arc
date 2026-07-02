@@ -133,3 +133,26 @@ def test_local_model_status_server_down(monkeypatch, tmp_path):
 
     result = server.local_model_status()
     assert "not running" in result
+
+
+def test_ask_local_model_success(monkeypatch):
+    monkeypatch.setattr(
+        server, "_query_model",
+        lambda prompt, system=None, max_tokens=server.DEFAULT_MAX_TOKENS, temperature=0.7: {
+            "ok": True, "content": "42", "model": "Qwen3-8B-Q4_K_M.gguf",
+        },
+    )
+    result = server.ask_local_model("what is the answer?")
+    assert "42" in result
+    assert "Qwen3-8B-Q4_K_M.gguf" in result
+
+
+def test_ask_local_model_error_passthrough(monkeypatch):
+    monkeypatch.setattr(
+        server, "_query_model",
+        lambda prompt, system=None, max_tokens=server.DEFAULT_MAX_TOKENS, temperature=0.7: {
+            "ok": False, "error": "llama-server is not running — start it with start-server.sh or call switch_model",
+        },
+    )
+    result = server.ask_local_model("anything")
+    assert "not running" in result
