@@ -33,6 +33,14 @@ Stack-specific items for the llama.cpp native SYCL build on Intel Arc 140V.
       same models and context sizes used in the IPEX-LLM baseline (Q4\_K\_M, CTX=8192).
       Target: beat or match the numbers in `../README.md`.
 
+- [x] **Vulkan backend A/B spike** — done 2026-07-02. Built cleanly (`build-vulkan/`,
+      SYCL `build/` untouched), GPU detected correctly, but Qwen3-8B-Q4_K_M benchmark
+      showed Vulkan -35% prefill / -55% generation vs the SYCL baseline. **Not a
+      viable candidate** — no promotion to the main guide planned. Full record in
+      `vulkan-spike-notes.md`. Part of the wider inference-engine evaluation — see
+      `~/llm/README.md` §"Inference engine landscape" and the
+      `project-vllm-arc-evaluation` memory.
+
 - [ ] **Validate speculative decoding** — test draft model setup once the server is stable.
 
 ## Ideas

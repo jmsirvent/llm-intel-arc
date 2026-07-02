@@ -24,6 +24,46 @@ Local LLM inference on Intel Arc 140V (Xe2) — Lenovo Yoga Slim 7, Ubuntu 24.04
 
 Native installation over Docker for local single-machine inference: direct GPU access, no passthrough, lower overhead. Docker was used with IPEX-LLM because it was the only distribution method for that stack — not by preference.
 
+## Inference engine landscape (research snapshot, 2026-07)
+
+Survey underpinning the `vllm-arc` evaluation tracked in `TODO.md`. The Arc 140V is a Xe2 **client iGPU** (Lunar Lake); most Intel-GPU support claims in this space target Data Center Max (Ponte Vecchio) or Arc Pro (discrete workstation) parts instead. Each entry below is evaluated against that specific distinction, not against generic "Intel GPU" support.
+
+### Validated in production
+
+| Engine | Status | Reference |
+|---|---|---|
+| llama.cpp (SYCL, `GGML_SYCL=ON`) | Production, native install | [`llama-cpp-arc/`](llama-cpp-arc/) · [SYCL backend docs](https://github.com/ggml-org/llama.cpp/blob/master/docs/backend/SYCL.md) |
+| IPEX-LLM (Ollama SYCL fork) | Frozen — upstream repository archived by Intel 2026-01 (known security issues) | [`ipex-llm/`](ipex-llm/) |
+
+### Ruled out
+
+| Option | Rationale |
+|---|---|
+| vLLM upstream (XPU/IPEX backend) | Documented hardware support is limited to Arc Pro B-Series and Data Center GPU Max; the Arc 140V is not listed as validated. |
+| `ipex-llm[serving]` vLLM fork | Inherits the parent project's archival status (2026-01, security); ruled out together with `ipex-llm`. |
+| `llm-scaler` (Intel's proposed ipex-llm successor) | Currently covers only Arc Pro and discrete workstation GPUs; Intel states it does not yet replace ipex-llm for client/consumer GPUs or iGPUs. |
+| Hugging Face TGI | Intel support is scoped to Data Center Max 1100/1550, with no documented Arc/Xe2 coverage. |
+| koboldcpp / LM Studio | Both wrap the same llama.cpp SYCL/Vulkan backend already deployed natively; they add packaging overhead without new capability. |
+| MLC-LLM | Advertised Arc support is not corroborated by primary documentation or independent benchmarks; only generic Vulkan support exists, unverified on Xe2. |
+| llama.cpp with the Vulkan backend (`GGML_VULKAN=ON`) | Spiked 2026-07-02: builds and runs correctly on Xe2, but Qwen3-8B-Q4_K_M benchmarked at -35% prefill / -55% generation vs the existing SYCL build. Not a viable replacement or complement. Full record in [`llama-cpp-arc/vulkan-spike-notes.md`](llama-cpp-arc/vulkan-spike-notes.md). |
+
+### Candidates for validation (confirmable as of July 2026)
+
+Ready for a hands-on validation spike on this hardware, with no known documentation blocker:
+
+| Option | Rationale | Reference |
+|---|---|---|
+| OpenVINO Model Server (OVMS) | First-party Intel Xe2 support, documented; exposes a native OpenAI-compatible API (`/v3/chat/completions`, `/models`) | [openvinotoolkit/model_server](https://github.com/openvinotoolkit/model_server) · [docs](https://docs.openvino.ai/2025/model-server/ovms_what_is_openvino_model_server.html) |
+| Native Ollama SYCL (v0.17+, independent of the IPEX-LLM fork) | Own SYCL implementation reported since 2026-02, decoupled from the archived fork; already exposes an OpenAI-compatible API | [ollama/ollama#8777](https://github.com/ollama/ollama/issues/8777) |
+| `optimum-intel` with IPEX | Actively maintained by Hugging Face, with documented GPU inference support; lacks a built-in OpenAI-compatible server, requiring a custom wrapper | [huggingface/optimum-intel](https://github.com/huggingface/optimum-intel) · [docs](https://docs.openvino.ai/2025/openvino-workflow-generative/inference-with-optimum-intel.html) |
+
+### Monitored (unconfirmed timeline)
+
+| Option | Condition for reconsideration |
+|---|---|
+| `llm-scaler` for client/iGPU hardware | Intel explicitly excludes consumer GPUs (Arc A770/B580) and iGPUs from current coverage; reassess if a future release extends support. |
+| `vllm-openvino` | Deprioritized: no confirmed documentation blocker, but the repository shows low activity and no tagged releases. Candidates with stronger prospects are being validated first. Reassess if it gains releases and adoption, or if the prioritized candidates fail validation. |
+
 ## GPU monitoring
 
 ```bash
