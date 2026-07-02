@@ -139,5 +139,48 @@ def ask_local_model(
     return f"{result['content']}\n\n(answered by {result['model']})"
 
 
+@mcp.tool()
+def summarize(text: str, focus: str | None = None) -> str:
+    """Summarize or condense text or logs using the local model. Use for
+    long output (build logs, diffs, articles) where only the gist matters."""
+    system = "You are a precise summarizer. Produce a concise summary of the user's text."
+    prompt = text
+    if focus:
+        system += f" Focus specifically on: {focus}."
+        prompt = f"Focus on {focus}.\n\n{text}"
+    result = _query_model(prompt, system=system, temperature=0.4)
+    if not result["ok"]:
+        return result["error"]
+    return f"{result['content']}\n\n(answered by {result['model']})"
+
+
+@mcp.tool()
+def draft_code(spec: str, language: str | None = None) -> str:
+    """Produce a first draft of code or a script from a spec, using the
+    local model. Use for boilerplate or a starting point to refine, not
+    for final production code."""
+    system = "You are a careful programmer. Write a first-draft implementation for the given spec."
+    if language:
+        system += f" Write it in {language}."
+    result = _query_model(spec, system=system, temperature=0.2)
+    if not result["ok"]:
+        return result["error"]
+    return f"{result['content']}\n\n(answered by {result['model']})"
+
+
+@mcp.tool()
+def second_opinion(question: str, context: str | None = None) -> str:
+    """Get a second opinion on a solution, design, or piece of reasoning
+    from the local model — useful as an independent sanity check."""
+    system = "You are a skeptical reviewer. Give a direct second opinion, noting any risks or alternatives."
+    prompt = question
+    if context:
+        prompt = f"Context: {context}\n\nQuestion: {question}"
+    result = _query_model(prompt, system=system, temperature=0.4)
+    if not result["ok"]:
+        return result["error"]
+    return f"{result['content']}\n\n(answered by {result['model']})"
+
+
 if __name__ == "__main__":
     mcp.run(transport="stdio")

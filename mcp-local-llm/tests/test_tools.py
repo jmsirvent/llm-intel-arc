@@ -156,3 +156,54 @@ def test_ask_local_model_error_passthrough(monkeypatch):
     )
     result = server.ask_local_model("anything")
     assert "not running" in result
+
+
+def _fake_query_model(**overrides):
+    base = {"ok": True, "content": "result text", "model": "Qwen3-8B-Q4_K_M.gguf"}
+    base.update(overrides)
+    return lambda prompt, system=None, max_tokens=server.DEFAULT_MAX_TOKENS, temperature=0.7: base
+
+
+def test_summarize_success(monkeypatch):
+    captured = {}
+
+    def fake(prompt, system=None, max_tokens=server.DEFAULT_MAX_TOKENS, temperature=0.7):
+        captured["system"] = system
+        captured["temperature"] = temperature
+        captured["prompt"] = prompt
+        return {"ok": True, "content": "short summary", "model": "Qwen3-8B-Q4_K_M.gguf"}
+
+    monkeypatch.setattr(server, "_query_model", fake)
+    result = server.summarize("a long piece of text", focus="key decisions")
+    assert "short summary" in result
+    assert captured["temperature"] == 0.4
+    assert "key decisions" in captured["prompt"] or "key decisions" in (captured["system"] or "")
+
+
+def test_draft_code_success(monkeypatch):
+    captured = {}
+
+    def fake(prompt, system=None, max_tokens=server.DEFAULT_MAX_TOKENS, temperature=0.7):
+        captured["system"] = system
+        captured["temperature"] = temperature
+        return {"ok": True, "content": "def f(): pass", "model": "Qwen2.5-Coder-7B-Instruct-Q4_K_M.gguf"}
+
+    monkeypatch.setattr(server, "_query_model", fake)
+    result = server.draft_code("a function that returns nothing", language="python")
+    assert "def f(): pass" in result
+    assert captured["temperature"] == 0.2
+
+
+def test_second_opinion_success(monkeypatch):
+    def fake(prompt, system=None, max_tokens=server.DEFAULT_MAX_TOKENS, temperature=0.7):
+        return {"ok": True, "content": "I'd also consider X", "model": "Ornith-1.0-9b-Q6_K.gguf"}
+
+    monkeypatch.setattr(server, "_query_model", fake)
+    result = server.second_opinion("should I use a mutex here?", context="single-writer queue")
+    assert "I'd also consider X" in result
+
+
+def test_summarize_error_passthrough(monkeypatch):
+    monkeypatch.setattr(server, "_query_model", _fake_query_model(ok=False, error="llama-server is not running"))
+    result = server.summarize("text")
+    assert "not running" in result
