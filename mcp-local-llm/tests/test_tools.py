@@ -96,6 +96,23 @@ def test_query_model_empty_content_with_reasoning():
     assert "--skip-chat-parsing" in result["error"]
 
 
+def test_query_model_empty_content_without_reasoning():
+    def handler(request):
+        return httpx.Response(
+            200,
+            json={
+                "choices": [{"message": {"content": ""}}],
+                "model": "Qwen3-8B-Q4_K_M.gguf",
+            },
+        )
+
+    client = _client_with_transport(handler)
+    result = server._query_model("hi", client=client)
+    assert result["ok"] is False
+    assert "empty" in result["error"].lower()
+    assert "--skip-chat-parsing" not in result["error"]
+
+
 def test_query_model_malformed_response():
     def handler(request):
         return httpx.Response(200, json={"model": "Qwen3-8B-Q4_K_M.gguf"})
@@ -192,15 +209,21 @@ def test_draft_code_success(monkeypatch):
     result = server.draft_code("a function that returns nothing", language="python")
     assert "def f(): pass" in result
     assert captured["temperature"] == 0.2
+    assert "python" in (captured["system"] or "")
 
 
 def test_second_opinion_success(monkeypatch):
+    captured = {}
+
     def fake(prompt, system=None, max_tokens=server.DEFAULT_MAX_TOKENS, temperature=0.7):
+        captured["prompt"] = prompt
+        captured["system"] = system
         return {"ok": True, "content": "I'd also consider X", "model": "Ornith-1.0-9b-Q6_K.gguf"}
 
     monkeypatch.setattr(server, "_query_model", fake)
     result = server.second_opinion("should I use a mutex here?", context="single-writer queue")
     assert "I'd also consider X" in result
+    assert "single-writer queue" in captured["prompt"] or "single-writer queue" in (captured["system"] or "")
 
 
 def test_summarize_error_passthrough(monkeypatch):
@@ -241,6 +264,23 @@ def test_switch_model_launches_start_server(monkeypatch, tmp_path):
     assert launched["kwargs"]["start_new_session"] is True
     assert "switch started" in result.lower()
     assert "local_model_status" in result
+
+
+def test_switch_model_popen_launch_failure(monkeypatch, tmp_path):
+    (tmp_path / "Qwen3-8B-Q4_K_M.gguf").touch()
+    monkeypatch.setattr(server, "MODELS_DIR", tmp_path)
+    monkeypatch.setattr(server, "_find_port_8080_pids", lambda: [])
+    monkeypatch.setattr(server, "_terminate_pids", lambda pids: None)
+
+    def fake_popen(args, **kwargs):
+        raise FileNotFoundError("no such file or directory")
+
+    monkeypatch.setattr(server.subprocess, "Popen", fake_popen)
+
+    result = server.switch_model("Qwen3-8B-Q4_K_M.gguf")
+    assert isinstance(result, str)
+    assert str(server.START_SERVER_SCRIPT) in result
+    assert "not found" in result.lower() or "failed to launch" in result.lower()
 
 
 def test_switch_model_skips_terminate_when_nothing_bound(monkeypatch, tmp_path):

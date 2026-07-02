@@ -92,13 +92,18 @@ def _query_model(
         model = body.get("model", "unknown")
         content = message.get("content") or ""
 
-        if not content and message.get("reasoning_content"):
+        if not content:
+            if message.get("reasoning_content"):
+                return {
+                    "ok": False,
+                    "error": (
+                        "the active model returned its answer in reasoning_content with an empty "
+                        "content field — restart it with --skip-chat-parsing to get plain content"
+                    ),
+                }
             return {
                 "ok": False,
-                "error": (
-                    "the active model returned its answer in reasoning_content with an empty "
-                    "content field — restart it with --skip-chat-parsing to get plain content"
-                ),
+                "error": "the model returned an empty response — try again or check server logs",
             }
 
         return {"ok": True, "content": content, "model": model}
@@ -110,7 +115,11 @@ def _query_model(
 @mcp.tool()
 def local_model_status() -> str:
     """Report whether the local llama-server is running, which GGUF is
-    currently loaded, and which GGUFs are available on disk to switch to."""
+    currently loaded, and which GGUFs are available on disk to switch to.
+
+    Note: the "loaded model" id comes from llama-server's /v1/models, which
+    typically reports the GGUF filename — expected to match switch_model's
+    on-disk catalog names in practice, but not guaranteed by the API contract."""
     loaded = _get_loaded_model()
     catalog = sorted(p.name for p in MODELS_DIR.glob("*.gguf")) if MODELS_DIR.exists() else []
     catalog_text = "\n".join(f"  - {name}" for name in catalog) or "  (none found)"
@@ -185,6 +194,9 @@ def second_opinion(question: str, context: str | None = None) -> str:
     return f"{result['content']}\n\n(answered by {result['model']})"
 
 
+# Note: `lsof -t -i:8080` can theoretically match client connections to
+# port 8080, not just the listening server — in practice no client holds an
+# open connection at switch time, so this is accepted imprecision.
 def _find_port_8080_pids() -> list[int]:
     try:
         output = subprocess.run(
@@ -209,7 +221,11 @@ def switch_model(model: str) -> str:
     on-disk catalog, stops the current server, and starts the new one in
     the background — this does NOT block, because loading a model takes
     2-5 minutes (JIT kernel recompilation on this hardware). Poll
-    local_model_status to see when the new model is ready."""
+    local_model_status to see when the new model is ready.
+
+    Note: no re-entrancy guard — calling switch_model again before a prior
+    switch has bound port 8080 can race two start-server.sh launches; this
+    is accepted behavior, not a bug."""
     catalog = sorted(p.name for p in MODELS_DIR.glob("*.gguf")) if MODELS_DIR.exists() else []
     if model not in catalog:
         catalog_text = "\n".join(f"  - {name}" for name in catalog) or "  (none found)"
@@ -219,12 +235,18 @@ def switch_model(model: str) -> str:
     if pids:
         _terminate_pids(pids)
 
-    subprocess.Popen(
-        [str(START_SERVER_SCRIPT), model],
-        start_new_session=True,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-    )
+    try:
+        subprocess.Popen(
+            [str(START_SERVER_SCRIPT), model],
+            start_new_session=True,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+    except (FileNotFoundError, PermissionError, OSError) as exc:
+        return (
+            f"failed to launch {START_SERVER_SCRIPT}: {type(exc).__name__}: {exc} — "
+            "check that the script exists and is executable"
+        )
 
     return f"Switch started for '{model}' — this takes 2-5 minutes. Poll local_model_status to check readiness."
 
