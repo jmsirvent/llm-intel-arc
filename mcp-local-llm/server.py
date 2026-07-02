@@ -58,6 +58,11 @@ def _query_model(
             }
         except httpx.TimeoutException:
             return {"ok": False, "error": f"Request to llama-server timed out after {INFERENCE_TIMEOUT}s"}
+        except httpx.HTTPError as exc:
+            return {
+                "ok": False,
+                "error": f"request to llama-server failed: {type(exc).__name__}: {exc}",
+            }
 
         if response.status_code == 503:
             return {"ok": False, "error": "llama-server is loading/compiling, retry shortly"}
@@ -70,8 +75,17 @@ def _query_model(
                 "error": f"llama-server returned {exc.response.status_code}: {exc.response.text[:200]}",
             }
 
-        body = response.json()
-        message = body["choices"][0]["message"]
+        try:
+            body = response.json()
+            message = body["choices"][0]["message"]
+        except (ValueError, KeyError, IndexError, TypeError) as exc:
+            return {
+                "ok": False,
+                "error": (
+                    "llama-server returned a malformed response "
+                    f"({type(exc).__name__}: {exc}); body: {response.text[:200]}"
+                ),
+            }
         model = body.get("model", "unknown")
         content = message.get("content") or ""
 

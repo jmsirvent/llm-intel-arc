@@ -96,6 +96,26 @@ def test_query_model_empty_content_with_reasoning():
     assert "--skip-chat-parsing" in result["error"]
 
 
+def test_query_model_malformed_response():
+    def handler(request):
+        return httpx.Response(200, json={"model": "Qwen3-8B-Q4_K_M.gguf"})
+
+    client = _client_with_transport(handler)
+    result = server._query_model("hi", client=client)
+    assert result["ok"] is False
+    assert "malformed" in result["error"]
+
+
+def test_query_model_read_error():
+    def handler(request):
+        raise httpx.ReadError("connection reset", request=request)
+
+    client = _client_with_transport(handler)
+    result = server._query_model("hi", client=client)
+    assert result["ok"] is False
+    assert "error" in result
+
+
 def test_local_model_status_server_up(monkeypatch, tmp_path):
     (tmp_path / "Qwen3-8B-Q4_K_M.gguf").touch()
     (tmp_path / "Gemma-4-12B.gguf").touch()
