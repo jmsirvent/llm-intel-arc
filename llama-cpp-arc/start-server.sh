@@ -40,6 +40,7 @@ SERVER="${LLAMACPP_DIR}/build/bin/llama-server"
 # Same catalog as benchmark.sh — keep both in sync when the lineup changes.
 CATALOG=(
   "Phi-4-mini-Instruct Q4_K_M|microsoft_Phi-4-mini-instruct-Q4_K_M.gguf|bartowski/microsoft_Phi-4-mini-instruct-GGUF|microsoft_Phi-4-mini-instruct-Q4_K_M.gguf|2.5 GB"
+  "Gemma-4-E2B Q4_K_M|gemma-4-E2B-it-Q4_K_M.gguf|unsloth/gemma-4-E2B-it-GGUF|gemma-4-E2B-it-Q4_K_M.gguf|3.1 GB"
   "Gemma-4-E4B Q4_K_M|gemma-4-E4B-it-Q4_K_M.gguf|unsloth/gemma-4-e4b-it-GGUF|gemma-4-E4B-it-Q4_K_M.gguf|4.9 GB"
   "DeepSeek-R1-Distill-Qwen-7B Q4_K_M|DeepSeek-R1-Distill-Qwen-7B-Q4_K_M.gguf|bartowski/DeepSeek-R1-Distill-Qwen-7B-GGUF|DeepSeek-R1-Distill-Qwen-7B-Q4_K_M.gguf|4.7 GB"
   "Qwen2.5-Coder-7B-Instruct Q4_K_M|Qwen2.5-Coder-7B-Instruct-Q4_K_M.gguf|bartowski/Qwen2.5-Coder-7B-Instruct-GGUF|Qwen2.5-Coder-7B-Instruct-Q4_K_M.gguf|4.7 GB"

@@ -504,6 +504,7 @@ watch -n1 'grep -E "MemFree|MemAvailable" /proc/meminfo'
 
 | Model | Quant | Size | Gen tok/s | Prefill tok/s | vs IPEX-LLM gen | vs IPEX-LLM prefill |
 |---|---|---|---|---|---|---|
+| gemma4-e2b | Q4\_K\_M | 2.88 GiB | **45.79** | **1083** | — ² | — ² |
 | phi4-mini | Q4\_K\_M | 2.31 GiB | **33.97** | **819** | — ² | — ² |
 | gemma4-e4b | Q4\_K\_M | 4.62 GiB | **26.73** | **617** | — ² | — ² |
 | deepseek-r1-distill-qwen-7b | Q4\_K\_M | 4.36 GiB | **20.93** | **525** | — ² | — ² |
