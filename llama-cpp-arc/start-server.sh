@@ -95,7 +95,7 @@ start_server() {
   sep
   bold "Starting: ${display_name}"
   echo "  File   : ${model_path}"
-  echo "  Params : --n-gpu-layers 999 --ctx-size 8192 --parallel 1 --port 8080"
+  echo "  Params : --n-gpu-layers 999 --ctx-size 32768 --parallel 1 --port 8080"
   sep
 
   # Activate oneAPI
@@ -120,7 +120,7 @@ start_server() {
     --port 8080 \
     --host 0.0.0.0 \
     --n-gpu-layers 999 \
-    --ctx-size 8192 \
+    --ctx-size 32768 \
     --parallel 1
 }
 

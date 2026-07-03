@@ -258,7 +258,7 @@ cd ~/llm/llama-cpp-arc/llama.cpp
   --port 8080 \
   --host 0.0.0.0 \
   --n-gpu-layers 999 \
-  --ctx-size 8192 \
+  --ctx-size 32768 \
   --parallel 1
 
 # Verify the server responds
@@ -275,7 +275,7 @@ curl -s http://localhost:8080/v1/chat/completions \
 | Parameter | Value | Description |
 |---|---|---|
 | `--n-gpu-layers 999` | 999 (all) | Load all layers onto GPU — no CPU/GPU split |
-| `--ctx-size` | 8192 | Default context; increase to 16384–32768 depending on model and available RAM |
+| `--ctx-size` | 32768 | Default context — raised from 8192 after agentic clients (OpenCode) exceeded it with tool-schema + system-prompt overhead; watch RAM on 14B models |
 | `--parallel` | 1 | Explicit single-user — avoids reserving buffers for parallel requests |
 | `--port` | 8080 | API port for this server |
 | `--host` | 0.0.0.0 | Listen on all interfaces |
