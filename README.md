@@ -57,6 +57,8 @@ Ready for a hands-on validation spike on this hardware, with no known documentat
 | Native Ollama SYCL (v0.17+, independent of the IPEX-LLM fork) | Own SYCL implementation reported since 2026-02, decoupled from the archived fork; already exposes an OpenAI-compatible API | [ollama/ollama#8777](https://github.com/ollama/ollama/issues/8777) |
 | `optimum-intel` with IPEX | Actively maintained by Hugging Face, with documented GPU inference support; lacks a built-in OpenAI-compatible server, requiring a custom wrapper | [huggingface/optimum-intel](https://github.com/huggingface/optimum-intel) · [docs](https://docs.openvino.ai/2025/openvino-workflow-generative/inference-with-optimum-intel.html) |
 
+**Next step:** validate OpenVINO Model Server first (first-party Xe2 support, already OpenAI-compatible), then native Ollama SYCL — in that order, by validation cost.
+
 ### Monitored (unconfirmed timeline)
 
 | Option | Condition for reconsideration |
