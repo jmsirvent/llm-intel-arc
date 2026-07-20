@@ -13,6 +13,7 @@ llama-cpp-arc/
 ├── start-server.sh     # interactive launcher (activates oneAPI + launches llama-server)
 ├── benchmark.sh         # interactive llama-bench runner across the model catalog
 ├── bench-spec.sh        # speculative-decoding benchmark via /completion
+├── quality-test.sh      # 5-prompt quality battery — save/diff baselines per model, regression + candidate comparison
 └── local-llm-yoga-slim7-ubuntu2404-llamacpp.md  # full installation guide
 ```
 
@@ -57,3 +58,4 @@ against a real reboot.
 
 - oneAPI compiler packages use `apt.repos.intel.com/oneapi` — different from the GPU driver repo (`repositories.intel.com/gpu`) which does not work with Xe2
 - `sycl-ls` is the first diagnostic: if it does not show the Arc 140V, the problem is the Level Zero runtime, not the compiler
+- ⚠️ Never run two model-loading processes at once (e.g. `llama-server` left running while also starting `benchmark.sh`/`start-server.sh`/`llama-bench` on another model) — confirmed to hang the `xe` driver and require a hard reboot, not just OOM. Stop the resident process and confirm `free -h` shows recovered memory before loading another model. Detail: guide §7 "Memory budget"

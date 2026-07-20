@@ -17,6 +17,7 @@
 7. [Recommended models](#7-recommended-models)
 8. [Model management and benchmarking](#8-model-management-and-benchmarking)
    - [8.4 Speculative decoding](#84-speculative-decoding)
+   - [8.5 Quality regression / candidate testing](#85-quality-regression--candidate-testing-with-quality-testsh)
 9. [Integration with external tools](#9-integration-with-external-tools)
 10. [Systemd service (autostart)](#10-systemd-service-autostart)
 11. [OS tuning for performance](#11-os-tuning-for-performance)
@@ -324,6 +325,8 @@ There is no fixed "available for models" figure — free memory on this unified-
 
 > **GPU pool allocation causes real (if minor) swap activity, not a `vm.swappiness` misconfiguration:** loading a model triggers brief swap-out bursts (observed: ~130 MB across two bursts while loading Qwen3-8B) as the kernel reclaims RSS from page cache/applications to satisfy the unified-memory allocation for the GPU. `swappiness = 10` (§11) reduces the tendency to swap but does not prevent it under genuine memory pressure — this is expected, not a bug. To tell transient allocation swap from real memory pressure, check `vmstat`'s `si`/`so` columns for active in/out traffic rather than the total swap-used figure from `free -h`, which persists from past peaks until something touches those pages again (or until `echo 3 > /proc/sys/vm/drop_caches`, which also lets the kernel swap idle pages back in once memory is freed).
 
+> ⚠️ **Never load two models concurrently — it can hang the `xe` driver, not just OOM.** Running `llama-bench` on a ~16 GB model while a separate `llama-server` process still held an earlier model resident (with `disponible` already down to ~16 GB, short of a clean ~20 GB boot) froze the entire system, requiring a hard reboot. `journalctl -b -1` showed no clean OOM-kill — instead a kernel hung-task warning: a thread blocked 614+ seconds on `xe_validation_lock`, held by `llama-bench` itself inside `xe_gem_create_ioctl` → `ttm_pool_alloc`, i.e. mid-allocation of a GPU buffer under memory pressure. This is a driver-level stability bug in `xe`'s TTM/validation path, not a graceful failure. **Always stop any resident `llama-server`/`llama-bench` process and confirm `free -h` shows recovered memory (`echo 3 > /proc/sys/vm/drop_caches` if needed) before starting another model load** — never run two model-loading processes at once on this hardware.
+
 ### 7.1 Recommended models (GGUFs from Hugging Face)
 
 Always use verified publishers. Two categories are acceptable:
@@ -341,7 +344,7 @@ Do not use unknown or unreviewed publishers outside these two categories.
 | Qwen2.5-Coder-7B-Instruct | Q4\_K\_M | 4.7 GB | 4.36 GiB | Fast coding / autocomplete | General-purpose lightweight assistant (non-code chat) when Llama-3.1-8B is already loaded elsewhere | bartowski | **19.42** |
 | Llama-3.1-8B-Instruct | Q4\_K\_M | 4.9 GB | 4.58 GiB | Fast general purpose | Multilingual tasks / translation — a documented strength of the Llama 3.1 base training | bartowski | **18.87** |
 | Qwen3-8B | Q4\_K\_M | 5.2 GB | 4.86 GiB | Reasoning / long context | Tool-calling / agentic chat — Qwen3 has native function-calling support | unsloth | **15.25** |
-| Gemma-4-12B-IT | Q4\_K\_M | 7.7 GB | 7.12 GiB | Vision + audio multimodal reasoning | Long-document analysis / summarization, leveraging the 256K context window | bartowski/gemma-4-12b-it-GGUF | **11.34** |
+| Gemma-4-12B-IT | UD-Q4\_K\_XL | 7.4 GB | 6.85 GiB | Vision + audio multimodal reasoning | Long-document analysis / summarization, leveraging the 256K context window | unsloth/gemma-4-12b-it-GGUF | **11.95** |
 | Ornith-1.0-9B | Q6\_K | 7.4 GB | 6.84 GiB | Agentic coding / tool-calling | Terminal/devops automation — trained on Terminal-Bench, not just SWE-Bench | deepreinforce-ai/Ornith-1.0-9B-GGUF | **10.20** |
 | Qwen3-14B *(optional)* | Q4\_K\_M | 9.0 GB | 8.38 GiB | Deep reasoning | Knowledge-intensive Q&A benefiting from the larger parameter count vs Qwen3-8B | unsloth | **10.09** |
 | Qwen2.5-Coder-14B-Instruct | Q4\_K\_M | 9.0 GB | 8.37 GiB | Agentic coding (Cline) | Code review / explaining unfamiliar code — larger model gives more reliable explanations than the 7B | bartowski | **9.92** |
@@ -349,7 +352,7 @@ Do not use unknown or unreviewed publishers outside these two categories.
 > RAM column: memory allocated by llama.cpp SYCL during `llama-bench` (`-p 512 -n 128 -ngl 999`).
 > Full benchmark results and IPEX-LLM comparison: §8.3.
 > Qwen3-14B: same speed as the 14B coders but double the RAM of Qwen3-8B — only worth it when reasoning depth matters more than throughput. Speculative decoding with Qwen3-8B as draft was tested and found not viable on this hardware (§8.4) — despite 64% acceptance, net throughput regresses 38%.
-> Gemma-4-12B: replaces Gemma-3-12B (+45% gen speed: 11.34 vs 7.84 tok/s), adds 256K context, audio/video, configurable thinking mode. Repo: `bartowski/gemma-4-12b-it-GGUF` (no `google_` prefix, unlike Gemma 3). The `mtp-gemma-4-12B-it-Q4_0.gguf` MTP head is not usable as a draft model in llama.cpp upstream (`ctx_other` requirement, §8.4) — no download needed for speculative decoding purposes.
+> Gemma-4-12B: replaces Gemma-3-12B (+52% gen speed: 11.95 vs 7.84 tok/s), adds 256K context, audio/video, configurable thinking mode. Repo: `unsloth/gemma-4-12b-it-GGUF`, quant `UD-Q4_K_XL` (Unsloth Dynamic 2.0 — per-layer precision allocation, not the uniform K-quant scheme). Swapped in 2026-07-20, replacing `bartowski/gemma-4-12b-it-GGUF` `Q4_K_M`: a 5-prompt quality battery (code gen, bug-fix, reasoning, strict JSON, race-condition explanation) at `temperature 0` with thinking disabled (`chat_template_kwargs: {"enable_thinking": false}`) found Unsloth equal-or-better on every prompt, with one objective win — bartowski's bug-fix answer returned a string (`"Error: ..."`) on the zero-divisor path instead of keeping the function's list return type consistent, Unsloth returned `[]`. Same size class (6.85 vs 7.12 GiB) and no throughput regression (see §8.3) — a low-risk swap, not a dramatic one. The `mtp-gemma-4-12B-it-Q4_0.gguf` MTP head is not usable as a draft model in llama.cpp upstream (`ctx_other` requirement, §8.4) — no download needed for speculative decoding purposes.
 > Gemma-4-E4B: MatFormer architecture — 7.52B declared params but runs at the efficiency of a ~4B model. Fastest general-purpose model under 5 GiB (26.73 tok/s). Vocab matches Gemma-4-12B (`n_vocab = 262144` in both) but was never tested as a separate draft model in §8.4 — only its MTP head was tested (fails, `ctx_other` incompatibility, unrelated to vocab). Untested as a §8.4-style separate draft; given the Gemma-4-E2B result (net regression despite matching vocab), unlikely to be worth pursuing.
 > DeepSeek-R1-Distill-Qwen-7B: Qwen2 architecture distilled from DeepSeek-R1. Faster than Qwen3-8B for reasoning tasks with internal chain-of-thought (`<think>` blocks); shares tokenizer with Qwen2.5-Coder models.
 
@@ -393,7 +396,60 @@ hf download deepreinforce-ai/Ornith-1.0-9B-GGUF ornith-1.0-9b-Q6_K.gguf \
 | Q8\_0 | 9.53 GB | Near full precision |
 | BF16 | 17.9 GB | Leaves very little headroom |
 
-### 7.3 Downloading models
+### 7.3 Evaluated and rejected models
+
+**Bonsai 27B (PrismML), `Q1_0` 1-bit variant — rejected 2026-07-20.** Bonsai 27B compresses
+Qwen3.6-27B to 1-bit/ternary weights. Only the 1-bit GGUF (`prism-ml/Bonsai-27B-gguf`,
+`Bonsai-27B-Q1_0.gguf`, 3.8 GB) has upstream SYCL support — merged via
+[llama.cpp#24721](https://github.com/ggml-org/llama.cpp/pull/24721) (2026-06-18,
+`MUL_MAT`/`OUT_PROD` for `Q1_0`), no fork or rebuild required. Loads cleanly on Arc 140V
+(no CPU-fallback warnings), but benchmarked with the project baseline
+(`-p 512 -n 128 -ngl 999`) at **4.36 tok/s generation** (pp512: 70.51 tok/s) — worse than
+every model in the §7.1 table above, including ones 2.5x its 3.53 GiB disk size. Not viable.
+
+Root cause: PR #24721 only implements generic `MUL_MAT`/`OUT_PROD` for `Q1_0` —
+correctness, not the decode-optimized kernels (`mmvq`-style) that every model in this
+guide's catalog benefits from via `Q4_K_M`. The pp512/tg128 split (mediocre prefill, very
+poor decode) is the fingerprint of that gap: decode is memory-bound and overhead-sensitive,
+exactly where a generic kernel loses the most. The parallel Vulkan PR for the ternary type
+([#25850](https://github.com/ggml-org/llama.cpp/pull/25850)) explicitly defers its
+integer-dot/MMQ decode path to a follow-up — SYCL has not even started that work.
+
+The **ternary** Bonsai variant (`Q2_0`/`TQ2_0`, 5.9 GB, higher quality than 1-bit) was not
+tested — it has no SYCL kernel at all upstream. A prior attempt
+([#22910](https://github.com/ggml-org/llama.cpp/pull/22910)) was closed without merging.
+
+**Revisit if:** upstream lands a dedicated SYCL decode kernel for `Q1_0`, or any SYCL
+kernel for `Q2_0`/`TQ2_0` merges. Watch `ggml-org/llama.cpp` PRs combining `sycl` with
+`Q1_0`/`Q2_0`/`TQ1_0`/`TQ2_0`.
+
+**Qwen3.6-27B dense, `Q4_K_M` — rejected 2026-07-20.** No kernel-support risk (standard
+`Q4_K_M`, same quant type as every model in §7.1), so this failure is different in kind
+from Bonsai's. Benchmarked with the project baseline at **5.22 tok/s generation** (pp512:
+72.75 tok/s) — worse than every model in §7.1, roughly half of `qwen3-14b`, despite the
+model's 15.65 GiB footprint and reported quality gains (SWE-bench Verified 77.2, ties
+Sonnet 4.6 on AA Agentic Index per Qwen's own published numbers).
+
+Root cause: a **memory-ceiling failure, not a backend one**. Loading pushed `disponible`
+down to 7-8 GiB and swap usage to 5+ GiB of the 8 GiB configured (confirmed live via
+`free -h`/`vmstat`, not inferred). The pp512/tg128 split (mediocre prefill, very poor
+decode) matches a swap-bound bottleneck: prefill amortizes page-fault cost across large
+batches, decode pays the full cost per token. This is a structural ceiling of this
+machine given the ~11-12 GB OS/desktop baseline (see the Memory budget note above), not
+specific to this model — expect the same outcome from any dense/MoE-active-weight model
+above ~10-12 GB disk size, including the pending `Qwen3-Coder-30B-A3B-Instruct` candidate
+(≈18.7 GB). The `qwen3-14b`/`qwen2.5-coder-14b` entries already in §7.1 (9 GB class) are
+close to this machine's practical ceiling for dense models, not a conservative floor.
+
+**Revisit if:** available RAM on this machine increases, or a smaller quant is tested with
+a confirmed clean ~20 GB `disponible` and the result still shows swap activity below the
+Qwen3-8B baseline (~130 MB) rather than multi-GB.
+
+The first load attempt (before this clean result) also surfaced a separate operational
+hazard — running a second model-loading process while one was already resident hung the
+`xe` driver and required a hard reboot. See the ⚠️ callout under "Memory budget" above.
+
+### 7.4 Downloading models
 
 ```bash
 # Install hf (huggingface_hub CLI — huggingface-cli is deprecated as of v1.21.0)
@@ -511,7 +567,7 @@ watch -n1 'grep -E "MemFree|MemAvailable" /proc/meminfo'
 | qwen2.5-coder-7b | Q4\_K\_M | 4.36 GiB | **19.42** | **479** | ≈ (−3%) | −41% ⁴ |
 | llama3.1-8b-instruct | Q4\_K\_M | 4.58 GiB | **18.87** | **358** | ≈ (−0%) | −17% ¹ |
 | qwen3-8b | Q4\_K\_M | 4.86 GiB | **15.25** | **323** | −16% | −38% ¹ |
-| gemma4-12b | Q4\_K\_M | 7.12 GiB | **11.34** | **273** | +8% ⁵ | +14% ⁵ |
+| gemma4-12b | UD-Q4\_K\_XL | 6.85 GiB | **11.95** | **284** | +14% ⁵ | +18% ⁵ |
 | ornith-1.0-9b | Q6\_K | 6.84 GiB | **10.20** | **330** | — ² | — ² |
 | qwen3-14b *(optional)* | Q4\_K\_M | 8.38 GiB | **10.09** | **225** | — ² | — ² |
 | qwen2.5-coder-14b | Q4\_K\_M | 8.37 GiB | **9.92** | **227** | — ³ | — ³ |
@@ -528,7 +584,7 @@ watch -n1 'grep -E "MemFree|MemAvailable" /proc/meminfo'
 > ⁴ IPEX-LLM baseline for qwen2.5-coder:7b: 20.0 tok/s gen, 814 tok/s prefill (FA on). llama.cpp without FA: 19.42 gen (≈), 479 prefill (−41%).
 > With FA on: 19.97 gen (+3%), 329 prefill (−59% vs IPEX-LLM) — FA regresses prefill on Arc 140V.
 >
-> ⁵ Gemma-4-12B replaces Gemma-3-12B (IPEX-LLM baseline: 10.5 tok/s gen, 240 tok/s prefill). Gemma-4 is +8% faster on generation and +14% on prefill despite running without Flash Attention.
+> ⁵ Gemma-4-12B replaces Gemma-3-12B (IPEX-LLM baseline: 10.5 tok/s gen, 240 tok/s prefill). Gemma-4 (Unsloth Dynamic `UD-Q4_K_XL`, swapped in 2026-07-20 after a bartowski-vs-Unsloth quality comparison — see §7.1 note) is +14% faster on generation and +18% on prefill despite running without Flash Attention.
 
 #### Flash Attention validation on Arc 140V ✅
 
@@ -607,6 +663,8 @@ Models without a draft option: Phi-4-mini (too small, not needed), Llama-3.1-8B 
 **Verdict: speculative decoding is not viable on Arc 140V for any tested pair, regardless of vocab compatibility or acceptance rate.** Even the best case (Qwen3, 64% acceptance) is a 38% regression. Lowering `--spec-draft-n-max` from 16→4 substantially reduces the loss (less wasted verify compute on rejected batches) but never closes the gap. The bottleneck is structural, not a tuning problem: Lunar Lake's Arc 140V shares LPDDR5x memory bandwidth between CPU and GPU, and running two model forward passes per step (draft generation + target verification) competes for the same constrained bandwidth that already limits single-model generation. There is no idle compute headroom to hide the draft's cost behind, unlike discrete GPUs with separate VRAM bandwidth where speculative decoding typically wins.
 
 This closes §8.4. The commands below are kept for future reference — revisit if this machine is replaced with a discrete-GPU setup or a future Xe driver/iGPU generation changes the memory-bandwidth-sharing behavior.
+
+> Historical note: the commands below reference `gemma-4-12B-it-Q4_K_M.gguf` (bartowski), the file actually used when these speculative-decoding tests ran. That file was superseded by `gemma-4-12b-it-UD-Q4_K_XL.gguf` (Unsloth) on 2026-07-20 (§7.1) and removed from `models/`. The verdict above is unaffected — same architecture, same conclusion would apply — but the exact paths won't resolve if copy-pasted as-is.
 
 #### Verifying vocabulary compatibility before attempting speculative decoding
 
@@ -765,6 +823,66 @@ rate does **not** guarantee a net win if the draft model's own compute cost outw
 tokens it saves.
 
 > **Diagnosing `0/0 accepted`:** if `bench-spec.sh` reports `accepted: 0/0` with the flags above, check the server log (start with `-lv 5`) for `adding speculative implementation 'draft-simple'` and `speculative decoding context initialized`. If instead you see `no implementations specified for speculative decoding`, verify: `--spec-type draft-simple` is present, `--parallel 1` is set (not the default 4 slots), and both models report identical `n_vocab` (§8.4 vocab verification snippet above).
+
+### 8.5 Quality regression / candidate testing with `quality-test.sh`
+
+`llama-bench` (§8.3) only measures speed — it says nothing about whether a model's actual
+answers are correct or well-formed. `quality-test.sh` runs a fixed 5-prompt battery (code
+generation, bug-fix, multi-step reasoning, strict JSON, race-condition explanation) against
+a running `llama-server` and either saves the outputs as a named baseline or diffs a fresh
+run against one. Built for, and validated by, the 2026-07-20 Gemma-4-12B comparison (§7.1)
+that caught a real bug: one quant variant's bug-fix answer broke the function's declared
+return type on an edge case, something no tok/s number would have surfaced.
+
+```bash
+# Save a baseline for the model currently loaded on :8080
+./quality-test.sh --save gemma-4-12b-ud-q4_k_xl
+
+# Later — after a llama.cpp rebuild, a re-pulled GGUF, or to compare a new candidate
+# against the same model already loaded on :8080:
+./quality-test.sh --diff gemma-4-12b-ud-q4_k_xl
+
+# List what's saved
+./quality-test.sh --list
+```
+
+Not a substitute for §8.3 — run both: `llama-bench` for throughput, `quality-test.sh` for
+"did the answers change or break." Two things to know before trusting a `--diff` result:
+
+- **Not a rigorous benchmark.** 5 prompts, no automated pass/fail scoring — you read the
+  diffs yourself. Good at catching obvious breaks (empty output, wrong answer, broken
+  format, a changed type contract), not a substitute for a real eval suite.
+- **Expect ~1/5 prompts to drift even with zero real change.** Confirmed empirically: running
+  the battery twice against the *same* model, same server, `temperature 0`, produced a
+  wording-level difference in 1 of 5 prompts (SYCL's parallel reduction order isn't
+  guaranteed deterministic — ties in logits can flip run to run). Treat a single
+  stylistically-different-but-still-correct prompt as noise. Multiple changed prompts, or
+  any prompt whose *conclusion* changed (wrong fix, broken format, wrong answer), is the
+  real signal.
+- **Gemma-4 (and other models with configurable thinking) need `enable_thinking: false`**
+  to avoid burning the entire `max_tokens` budget on `reasoning_content` and returning empty
+  `content` — the script already sets this via `chat_template_kwargs`, but it's why the
+  payload looks the way it does if you're extending the script for a model without this
+  quirk.
+- **The server-side reasoning flag needed differs by model — using the wrong one silently
+  produces empty output, which looks like a regression in `--diff` but isn't.** Confirmed
+  while generating baselines for the full catalog (2026-07-20):
+  - `--reasoning off` **works** for Qwen3 (`qwen3-8b`, `qwen3-14b`) — the template supports a
+    real on/off toggle, content comes back non-empty and complete.
+  - `--reasoning off` **does not work** for DeepSeek-R1-Distill-Qwen-7B — the model always
+    emits a `<think>` trace regardless of the flag (it's baked in by training, not
+    template-controlled); with `--reasoning off` alone it burned the full token budget on
+    `reasoning_content` and returned **empty `content`** (confirmed via a raw API check, not
+    assumed). Fix: start with `--skip-chat-parsing` instead (dumps everything, including the
+    think trace, into `content`) and raise `--max-tokens` well above the default (used 3072).
+  - Ornith-1.0-9B has the same always-reasons behavior as DeepSeek-R1-Distill — same fix
+    (`--skip-chat-parsing` + higher `--max-tokens`), applied preemptively without needing to
+    rediscover the empty-content failure first.
+  - Models with no reasoning mode (Phi-4-mini, Gemma-4-E2B/E4B/12B, Llama-3.1-8B,
+    Qwen2.5-Coder-7B/14B) need neither flag — started plain.
+  **When re-running `--diff` against a saved baseline, start the server with the same
+  reasoning-handling flag used when that baseline was saved** (see the per-model list above),
+  or a real "no change" will misreport as a regression.
 
 ---
 

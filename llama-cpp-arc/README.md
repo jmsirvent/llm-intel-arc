@@ -74,10 +74,21 @@ curl http://localhost:8080/health
 | qwen2.5-coder-7b | Q4\_K\_M | **19.42** | **479** |
 | llama3.1-8b-instruct | Q4\_K\_M | **18.87** | **358** |
 | qwen3-8b | Q4\_K\_M | **15.25** | **323** |
-| gemma4-12b | Q4\_K\_M | **11.34** | **273** |
+| gemma4-12b | UD-Q4\_K\_XL | **11.95** | **284** |
 | ornith-1.0-9b | Q6\_K | **10.20** | **330** |
 | qwen3-14b *(optional)* | Q4\_K\_M | **10.09** | **225** |
 | qwen2.5-coder-14b | Q4\_K\_M | **9.92** | **227** |
+
+**Evaluated and rejected:** Bonsai 27B (PrismML), `Q1_0` 1-bit variant — 4.36 tok/s
+generation, worse than every model above despite a 3.53 GiB footprint. SYCL kernel
+support exists ([llama.cpp#24721](https://github.com/ggml-org/llama.cpp/pull/24721)) but
+is correctness-only, with no decode-optimized path yet. Qwen3.6-27B dense, `Q4_K_M`
+(15.65 GiB) — 5.22 tok/s generation, roughly half of `qwen3-14b`; a memory-ceiling failure
+(swap-bound decode), not a kernel one — this machine's ~11-12 GB OS baseline leaves too
+little headroom for dense models above ~10-12 GB disk size. Also surfaced a separate
+`xe` driver hang when two model-loading processes ran concurrently — never load two models
+at once on this hardware. Full rationale in
+[local-llm-yoga-slim7-ubuntu2404-llamacpp.md §7.3](local-llm-yoga-slim7-ubuntu2404-llamacpp.md#73-evaluated-and-rejected-models).
 
 ## IPEX-LLM baseline (previous stack, Flash Attention on, Q4\_K\_M)
 
