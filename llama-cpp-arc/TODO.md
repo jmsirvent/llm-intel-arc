@@ -55,6 +55,12 @@ Stack-specific items for the llama.cpp native SYCL build on Intel Arc 140V.
       into llama.cpp; the current SYCL backend has no equivalent. **Reopen when:** upstream
       llama.cpp merges improved SYCL FA kernels for Xe2, or a new oneAPI release changes SYCL
       FA performance — re-run the guide's §8.3 benchmark against the IPEX-LLM baseline then.
+      **Real-world stakes confirmed 2026-07-21:** live Hermes Agent + Ornith-1.0-9b usage
+      showed prefill degrading from ~177 to ~50 tok/s within a single 24.4K-token agentic
+      prompt (317s total, before any response token) — the `-p 512` benchmark only shows
+      the fast early part of this curve. Any client that grows context turn-over-turn
+      (agentic loops, persistent memory) gets progressively slower per turn, not a flat
+      cost. Full curve in the guide's §8.3 "Flash Attention validation" section.
 
 ## Ideas
 

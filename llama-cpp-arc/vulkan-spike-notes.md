@@ -116,5 +116,5 @@ generation, and cooperative-matrix support alone doesn't close the gap here).
 **Verdict: not a candidate to replace or complement the SYCL build.** No promotion to
 the main guide (§13) or a sibling document — this file stays as the closed record of
 the spike. `build-vulkan/` can be removed if disk space is needed; kept for now in case
-future llama.cpp/Mesa releases change the picture (see main guide §12 for the analogous
+future llama.cpp/Mesa releases change the picture (see main guide §11 for the analogous
 SYCL cold-start gotcha, unrelated but same "revisit if upstream changes" pattern).

@@ -49,10 +49,10 @@ cmake --build llama.cpp/build --config Release -j$(nproc) \
 
 ## Status
 
-Validated (§1-9, §11 ✅ in the full guide): build, GPU inference, benchmarking, Flash Attention,
+Validated (§1-11 ✅ in the full guide): build, GPU inference, benchmarking, Flash Attention,
 speculative decoding (found not viable on this hardware), model lineup, and VS Code client
-integration. Only §10 (systemd autostart) remains ⚠️ — the unit file is corrected but untested
-against a real reboot.
+integration. Systemd autostart was considered and dropped — `start-server.sh` already covers
+starting the server, and every use case so far switches between models interactively.
 
 ## Development notes
 

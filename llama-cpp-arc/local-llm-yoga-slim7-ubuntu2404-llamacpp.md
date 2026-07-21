@@ -19,9 +19,8 @@
    - [8.4 Speculative decoding](#84-speculative-decoding)
    - [8.5 Quality regression / candidate testing](#85-quality-regression--candidate-testing-with-quality-testsh)
 9. [Integration with external tools](#9-integration-with-external-tools)
-10. [Systemd service (autostart)](#10-systemd-service-autostart)
-11. [OS tuning for performance](#11-os-tuning-for-performance)
-12. [Troubleshooting](#12-troubleshooting)
+10. [OS tuning for performance](#10-os-tuning-for-performance)
+11. [Troubleshooting](#11-troubleshooting)
 
 ---
 
@@ -182,7 +181,7 @@ sycl-ls
 
 > ⚠️ **If `sycl-ls` does not show the Arc 140V:** the problem is the Level Zero runtime (§3), not the compiler. Verify that `clinfo -l` shows the GPU before continuing.
 
-> **`setvars.sh`**: this script sets up `PATH`, `LD_LIBRARY_PATH`, `MKLROOT` and other environment variables needed for icx/icpx and MKL. It must be run in each terminal session before building or starting the server. See §6 for automatic activation via systemd.
+> **`setvars.sh`**: this script sets up `PATH`, `LD_LIBRARY_PATH`, `MKLROOT` and other environment variables needed for icx/icpx and MKL. It must be run in each terminal session before building or starting the server manually — `start-server.sh` (§6.4) sources it automatically, so this only matters for manual `llama-server`/`llama-bench` invocations.
 
 ---
 
@@ -323,7 +322,7 @@ There is no fixed "available for models" figure — free memory on this unified-
 
 > ⚠️ **xe driver behavior:** once the xe driver assigns RAM pages to the GPU pool (on first model load), it does not return them to the system even if the model is unloaded. Memory is only fully recovered with a reboot or `echo 3 > /proc/sys/vm/drop_caches` after stopping the server.
 
-> **GPU pool allocation causes real (if minor) swap activity, not a `vm.swappiness` misconfiguration:** loading a model triggers brief swap-out bursts (observed: ~130 MB across two bursts while loading Qwen3-8B) as the kernel reclaims RSS from page cache/applications to satisfy the unified-memory allocation for the GPU. `swappiness = 10` (§11) reduces the tendency to swap but does not prevent it under genuine memory pressure — this is expected, not a bug. To tell transient allocation swap from real memory pressure, check `vmstat`'s `si`/`so` columns for active in/out traffic rather than the total swap-used figure from `free -h`, which persists from past peaks until something touches those pages again (or until `echo 3 > /proc/sys/vm/drop_caches`, which also lets the kernel swap idle pages back in once memory is freed).
+> **GPU pool allocation causes real (if minor) swap activity, not a `vm.swappiness` misconfiguration:** loading a model triggers brief swap-out bursts (observed: ~130 MB across two bursts while loading Qwen3-8B) as the kernel reclaims RSS from page cache/applications to satisfy the unified-memory allocation for the GPU. `swappiness = 10` (§10) reduces the tendency to swap but does not prevent it under genuine memory pressure — this is expected, not a bug. To tell transient allocation swap from real memory pressure, check `vmstat`'s `si`/`so` columns for active in/out traffic rather than the total swap-used figure from `free -h`, which persists from past peaks until something touches those pages again (or until `echo 3 > /proc/sys/vm/drop_caches`, which also lets the kernel swap idle pages back in once memory is freed).
 
 > ⚠️ **Never load two models concurrently — it can hang the `xe` driver, not just OOM.** Running `llama-bench` on a ~16 GB model while a separate `llama-server` process still held an earlier model resident (with `disponible` already down to ~16 GB, short of a clean ~20 GB boot) froze the entire system, requiring a hard reboot. `journalctl -b -1` showed no clean OOM-kill — instead a kernel hung-task warning: a thread blocked 614+ seconds on `xe_validation_lock`, held by `llama-bench` itself inside `xe_gem_create_ioctl` → `ttm_pool_alloc`, i.e. mid-allocation of a GPU buffer under memory pressure. This is a driver-level stability bug in `xe`'s TTM/validation path, not a graceful failure. **Always stop any resident `llama-server`/`llama-bench` process and confirm `free -h` shows recovered memory (`echo 3 > /proc/sys/vm/drop_caches` if needed) before starting another model load** — never run two model-loading processes at once on this hardware.
 
@@ -376,7 +375,7 @@ The entire Qwen2.5/Qwen3 line clamps because `n_ctx_train` is 32768/40960 respec
 
 **Counter-intuitive finding:** Phi-4-mini (2.5 GB) and Llama-3.1-8B (4.9 GB) cost *more* memory at 131072 than Gemma-4-12B (7.4 GB, 3x heavier). Gemma-4's hybrid local/global attention (sliding window on most layers, full attention only on the final layer per block) scales its KV cache far more gently with context length than the standard full attention Llama/Phi use — at large context, attention architecture predicts memory cost better than parameter count does. Practical takeaway: for a 64K-128K-context client (e.g. Hermes Agent), prefer the Gemma-4 family over same-size-class dense models with standard attention.
 
-**Operational note:** memory pressure from these tests doesn't fully self-recover just from killing the server — swap usage in particular persists until pages are touched again. Between successive high-context load tests, run the full remediation from §12 ("RAM is not recovered after stopping the server"), not just `drop_caches` alone, to get a clean baseline.
+**Operational note:** memory pressure from these tests doesn't fully self-recover just from killing the server — swap usage in particular persists until pages are touched again. Between successive high-context load tests, run the full remediation from §11 ("RAM is not recovered after stopping the server"), not just `drop_caches` alone, to get a clean baseline.
 
 **The 4 Qwen models that fail this check are not deprecated.** The 64K requirement above is Hermes-specific, not a catalog-wide bar — `qwen2.5-coder-7b`/`14b` and `qwen3-8b`/`14b` remain the right pick for their existing roles (Cline autocomplete, tool-calling agentic chat, per the table above) at their native context (32768/40960), which every other client already using this catalog (OpenCode, Twinny, CodeGPT) works with fine without ever requesting 64K. Deleting them was considered and explicitly rejected (2026-07-21) — a new client's stricter requirement doesn't retroactively invalidate models already serving other clients correctly. Point Hermes at one of the 7 compliant models above; leave the rest of the catalog untouched.
 
@@ -650,6 +649,17 @@ Llama 3.1 is the only model with a positive prefill delta (+5%), but the gain is
 Qwen3-14B generation collapses from 10.09 to 6.08 tok/s with FA on. This is likely memory pressure: the model uses 8.38 GiB plus FA intermediate buffers, pushing against the available GPU pool and causing the xe driver to spill.
 
 > **TODO (open, not a permanent limitation):** the prefill gap vs IPEX-LLM (e.g. qwen3-8b: 323 vs 522 tok/s) remains unresolved. IPEX-LLM shipped Intel-patched Xe-specific FA kernels that were never upstreamed into llama.cpp — the current SYCL backend has no equivalent. **Reopen this when:** upstream `llama.cpp` merges improved SYCL FA kernels for Xe2, or a new oneAPI release changes SYCL FA performance characteristics — re-run the §8.3 benchmark table against IPEX-LLM's numbers (`benchmark-reference-ipex-llm` memory) at that point to check whether the gap closed.
+
+**Real-world evidence of this gap, from live Hermes Agent usage (2026-07-21):** the `-p 512` benchmark above only shows the fast part of the curve — within a single long prompt, prefill throughput degrades continuously as the KV cache grows, since there's no FA kernel to keep attention cost near-linear. Observed on `ornith-1.0-9b` processing a real 24,446-token agentic prompt (Hermes, tool schemas + conversation history):
+
+| Token range | Instantaneous prefill rate |
+|---|---|
+| 0 → 2,048 | ~177 tok/s |
+| 9,613 → 11,661 | ~81 tok/s |
+| 17,805 → 19,853 | ~62 tok/s |
+| 23,949 → 24,446 | ~50 tok/s |
+
+Total: 317 s (5+ min) just to process this one prompt, before generating a single response token. Rate at the end is roughly a third of the rate at the start, and a sixth of the catalog's advertised 330 tok/s (which only reflects the first ~512 tokens). **Practical implication:** any client that keeps growing context turn-over-turn (agentic loops, persistent memory, tool-call history — exactly Hermes's usage pattern) gets progressively slower per turn within a session, not a flat per-token cost. This doesn't change the fix (still blocked on upstream FA kernels), but raises the real-world stakes of closing it — worth re-checking this specific curve, not just the `-p 512` number, when a fix lands.
 
 **Baseline reference — IPEX-LLM (Q4\_K\_M, Arc 140V, CTX=8192, Flash Attention on):**
 
@@ -966,6 +976,8 @@ Twinny 3.x manages providers through its own UI, not `settings.json` — open th
 > **One model at a time:** unlike Ollama, `llama-server` only serves the single GGUF it was started with. FIM and Chat providers must point to the *same* model unless you run two `llama-server` instances on two different ports (doubles memory use — see the variable budget in §7). The "Phi-4-mini for FIM / Qwen3-8B for chat" split only works with that two-instance setup.
 
 > **Blank chat responses with reasoning models:** Ornith, Qwen3, and DeepSeek-R1 split their chain-of-thought into `message.reasoning_content`, separate from `message.content` — Twinny only reads `content`, so if the model's reasoning doesn't finish before hitting `max_tokens`, the panel shows nothing. Fix: add `--skip-chat-parsing` to the server params (§6.2) — forces everything, including the reasoning trace, into `content`.
+>
+> **Verified NOT an issue for Hermes Agent + Ornith (2026-07-21):** checked the live server's `/slots` endpoint mid-request — Hermes sends `"max_tokens": -1` (unlimited), so the model always finishes its `<think>` block and `content` gets populated regardless of the `reasoning_content` split. No `--skip-chat-parsing` needed for this specific client. Re-check this if Hermes's config ever starts capping `max_tokens` — that's the actual trigger condition, not the model or client identity by itself.
 
 #### Cline — coding agent
 
@@ -1007,53 +1019,7 @@ print(response.choices[0].message.content)
 
 ---
 
-## 10. Systemd service (autostart) ⚠️
-
-```bash
-sudo tee /etc/systemd/system/llama-server.service > /dev/null <<'EOF'
-[Unit]
-Description=llama-server SYCL (Intel Arc 140V)
-After=network-online.target
-Wants=network-online.target
-
-[Service]
-Type=simple
-User=YOUR_USER
-WorkingDirectory=/home/YOUR_USER/llm/llama-cpp-arc
-
-# No ExecStartPre / Environment= needed here: start-server.sh sources
-# setvars.sh and exports the SYCL variables itself before exec'ing
-# llama-server (see §6.4). Duplicating that in the unit would be redundant.
-# Explicit model filename required — with no argument, start-server.sh shows
-# the interactive menu, which blocks indefinitely without a TTY under systemd.
-ExecStart=/home/YOUR_USER/llm/llama-cpp-arc/start-server.sh Qwen3-8B-Q4_K_M.gguf
-
-Restart=on-failure
-RestartSec=10s
-TimeoutStartSec=120
-
-[Install]
-WantedBy=multi-user.target
-EOF
-
-# Replace YOUR_USER with your username
-sudo sed -i "s/YOUR_USER/$USER/g" /etc/systemd/system/llama-server.service
-
-# Enable
-sudo systemctl daemon-reload
-sudo systemctl enable --now llama-server.service
-
-# Status
-sudo systemctl status llama-server.service
-```
-
-> **oneAPI activation:** no `ExecStartPre` or `Environment=` is needed for SYCL — systemd doesn't propagate environment variables between directives anyway, but that's moot here because `start-server.sh` is self-contained: it sources `setvars.sh` and exports `GGML_SYCL_DEVICE` / `SYCL_CACHE_PERSISTENT` / `ZES_ENABLE_SYSMAN` itself, right before `exec`-ing `llama-server` (§6.4). The unit only needs to invoke the script.
->
-> **`After=network-online.target`, not `multi-user.target`:** a unit with `WantedBy=multi-user.target` cannot also declare `After=multi-user.target` — that's an ordering cycle (reaching `multi-user.target` would have to wait for this unit, which itself waits for `multi-user.target`). systemd detects and breaks the cycle, silently dropping the intended ordering. Since the unit already declares `Wants=network-online.target`, `After=` must reference that same target.
-
----
-
-## 11. OS tuning for performance ✅
+## 10. OS tuning for performance ✅
 
 Two configuration files that improve inference stability and performance. Independent of the server — persist across reboots. Identical to those in the previous IPEX-LLM stack.
 
@@ -1082,7 +1048,6 @@ sudo sysctl -p /etc/sysctl.d/99-llm-performance.conf
 sudo tee /etc/systemd/system/cpu-performance.service > /dev/null <<'EOF'
 [Unit]
 Description=CPU performance governor and HWP dynamic boost
-Before=llama-server.service
 
 [Service]
 Type=oneshot
@@ -1097,7 +1062,7 @@ EOF
 sudo systemctl daemon-reload && sudo systemctl enable --now cpu-performance.service
 ```
 
-> **`Before=llama-server.service`:** the governor must be active before the server starts compiling SYCL kernels on first boot. No `After=multi-user.target` is needed (or correct) here: paired with `WantedBy=multi-user.target` it would be an ordering cycle (same bug fixed in §10) — `cpufreq` sysfs paths are available from early boot regardless, and the `Before=` relation already guarantees this unit runs ahead of `llama-server.service`.
+> **No ordering directive needed:** the model server is started interactively via `start-server.sh` (§6.4), never by systemd — there's no boot-time unit to order this against. `cpufreq` sysfs paths are available from early boot regardless, so a plain `WantedBy=multi-user.target` oneshot is enough; the governor will already be set to `performance` by the time you run `start-server.sh` yourself.
 
 Verification:
 
@@ -1109,7 +1074,7 @@ cat /proc/sys/vm/swappiness                                 # 10
 
 ---
 
-## 12. Troubleshooting
+## 11. Troubleshooting
 
 ### `sycl-ls` does not show the Arc 140V
 

@@ -45,7 +45,6 @@ VS Code (Twinny / Cline / Roo Code) · Open WebUI · Python scripts
 | Benchmarks vs IPEX-LLM | ✅ Validated (prefill gap on some models remains open — §8.3) |
 | Speculative decoding | ✅ Validated — not viable on this hardware (§8.4) |
 | VS Code client integration (Twinny/Cline) | ✅ Validated |
-| Systemd autostart | ⚠️ Corrected, untested against a real reboot (§10) |
 
 ## Quick start (once built)
 
@@ -113,4 +112,4 @@ below 64K without YaRN. Full table and per-model memory readings in
 
 → **[local-llm-yoga-slim7-ubuntu2404-llamacpp.md](local-llm-yoga-slim7-ubuntu2404-llamacpp.md)**
 
-Covers: prerequisites, Level Zero and oneAPI installation, llama.cpp build, server configuration, recommended models, VS Code integration, systemd, OS tuning, and troubleshooting.
+Covers: prerequisites, Level Zero and oneAPI installation, llama.cpp build, server configuration, recommended models, VS Code integration, OS tuning, and troubleshooting.
