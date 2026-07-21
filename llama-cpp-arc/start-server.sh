@@ -37,19 +37,25 @@ MODELS_DIR="${SCRIPT_DIR}/models"
 SERVER="${LLAMACPP_DIR}/build/bin/llama-server"
 
 # ── Model catalog ─────────────────────────────────────────────────────────────
-# Same catalog as benchmark.sh — keep both in sync when the lineup changes.
+# Same model lineup as benchmark.sh (which has no ctx-size field — llama-bench
+# doesn't keep a persistent server) — keep the first 5 fields in sync.
+# 6th field: --ctx-size for this model. 65536 for the 7 models verified safe at
+# that context (see the guide's §7.1 "Context window ceiling" table); the 4
+# Qwen2.5-Coder/Qwen3 models stay at their proven 32768 — pushing them to 65536
+# clamps below that anyway and pushes memory into dangerous territory (see the
+# guide's §7.1 table and the project-model-catalog-candidates memory).
 CATALOG=(
-  "Phi-4-mini-Instruct Q4_K_M|microsoft_Phi-4-mini-instruct-Q4_K_M.gguf|bartowski/microsoft_Phi-4-mini-instruct-GGUF|microsoft_Phi-4-mini-instruct-Q4_K_M.gguf|2.5 GB"
-  "Gemma-4-E2B Q4_K_M|gemma-4-E2B-it-Q4_K_M.gguf|unsloth/gemma-4-E2B-it-GGUF|gemma-4-E2B-it-Q4_K_M.gguf|3.1 GB"
-  "Gemma-4-E4B Q4_K_M|gemma-4-E4B-it-Q4_K_M.gguf|unsloth/gemma-4-e4b-it-GGUF|gemma-4-E4B-it-Q4_K_M.gguf|4.9 GB"
-  "DeepSeek-R1-Distill-Qwen-7B Q4_K_M|DeepSeek-R1-Distill-Qwen-7B-Q4_K_M.gguf|bartowski/DeepSeek-R1-Distill-Qwen-7B-GGUF|DeepSeek-R1-Distill-Qwen-7B-Q4_K_M.gguf|4.7 GB"
-  "Qwen2.5-Coder-7B-Instruct Q4_K_M|Qwen2.5-Coder-7B-Instruct-Q4_K_M.gguf|bartowski/Qwen2.5-Coder-7B-Instruct-GGUF|Qwen2.5-Coder-7B-Instruct-Q4_K_M.gguf|4.7 GB"
-  "Llama-3.1-8B-Instruct Q4_K_M|Meta-Llama-3.1-8B-Instruct-Q4_K_M.gguf|bartowski/Meta-Llama-3.1-8B-Instruct-GGUF|Meta-Llama-3.1-8B-Instruct-Q4_K_M.gguf|4.9 GB"
-  "Qwen3-8B Q4_K_M|Qwen3-8B-Q4_K_M.gguf|unsloth/Qwen3-8B-GGUF|Qwen3-8B-Q4_K_M.gguf|5.2 GB"
-  "Gemma-4-12B UD-Q4_K_XL|gemma-4-12b-it-UD-Q4_K_XL.gguf|unsloth/gemma-4-12b-it-GGUF|gemma-4-12b-it-UD-Q4_K_XL.gguf|7.4 GB"
-  "Ornith-1.0-9B Q6_K|ornith-1.0-9b-Q6_K.gguf|deepreinforce-ai/Ornith-1.0-9B-GGUF|ornith-1.0-9b-Q6_K.gguf|7.4 GB"
-  "Qwen3-14B Q4_K_M (optional)|Qwen3-14B-Q4_K_M.gguf|unsloth/Qwen3-14B-GGUF|Qwen3-14B-Q4_K_M.gguf|9.0 GB"
-  "Qwen2.5-Coder-14B-Instruct Q4_K_M|Qwen2.5-Coder-14B-Instruct-Q4_K_M.gguf|bartowski/Qwen2.5-Coder-14B-Instruct-GGUF|Qwen2.5-Coder-14B-Instruct-Q4_K_M.gguf|9.0 GB"
+  "Phi-4-mini-Instruct Q4_K_M|microsoft_Phi-4-mini-instruct-Q4_K_M.gguf|bartowski/microsoft_Phi-4-mini-instruct-GGUF|microsoft_Phi-4-mini-instruct-Q4_K_M.gguf|2.5 GB|65536"
+  "Gemma-4-E2B Q4_K_M|gemma-4-E2B-it-Q4_K_M.gguf|unsloth/gemma-4-E2B-it-GGUF|gemma-4-E2B-it-Q4_K_M.gguf|3.1 GB|65536"
+  "Gemma-4-E4B Q4_K_M|gemma-4-E4B-it-Q4_K_M.gguf|unsloth/gemma-4-e4b-it-GGUF|gemma-4-E4B-it-Q4_K_M.gguf|4.9 GB|65536"
+  "DeepSeek-R1-Distill-Qwen-7B Q4_K_M|DeepSeek-R1-Distill-Qwen-7B-Q4_K_M.gguf|bartowski/DeepSeek-R1-Distill-Qwen-7B-GGUF|DeepSeek-R1-Distill-Qwen-7B-Q4_K_M.gguf|4.7 GB|65536"
+  "Qwen2.5-Coder-7B-Instruct Q4_K_M|Qwen2.5-Coder-7B-Instruct-Q4_K_M.gguf|bartowski/Qwen2.5-Coder-7B-Instruct-GGUF|Qwen2.5-Coder-7B-Instruct-Q4_K_M.gguf|4.7 GB|32768"
+  "Llama-3.1-8B-Instruct Q4_K_M|Meta-Llama-3.1-8B-Instruct-Q4_K_M.gguf|bartowski/Meta-Llama-3.1-8B-Instruct-GGUF|Meta-Llama-3.1-8B-Instruct-Q4_K_M.gguf|4.9 GB|65536"
+  "Qwen3-8B Q4_K_M|Qwen3-8B-Q4_K_M.gguf|unsloth/Qwen3-8B-GGUF|Qwen3-8B-Q4_K_M.gguf|5.2 GB|32768"
+  "Gemma-4-12B UD-Q4_K_XL|gemma-4-12b-it-UD-Q4_K_XL.gguf|unsloth/gemma-4-12b-it-GGUF|gemma-4-12b-it-UD-Q4_K_XL.gguf|7.4 GB|65536"
+  "Ornith-1.0-9B Q6_K|ornith-1.0-9b-Q6_K.gguf|deepreinforce-ai/Ornith-1.0-9B-GGUF|ornith-1.0-9b-Q6_K.gguf|7.4 GB|65536"
+  "Qwen3-14B Q4_K_M (optional)|Qwen3-14B-Q4_K_M.gguf|unsloth/Qwen3-14B-GGUF|Qwen3-14B-Q4_K_M.gguf|9.0 GB|32768"
+  "Qwen2.5-Coder-14B-Instruct Q4_K_M|Qwen2.5-Coder-14B-Instruct-Q4_K_M.gguf|bartowski/Qwen2.5-Coder-14B-Instruct-GGUF|Qwen2.5-Coder-14B-Instruct-Q4_K_M.gguf|9.0 GB|32768"
 )
 
 # ── Color helpers ─────────────────────────────────────────────────────────────
@@ -90,12 +96,13 @@ model_size() {
 start_server() {
   local display_name="$1"
   local filename="$2"
+  local ctx_size="${3:-32768}"
   local model_path="${MODELS_DIR}/${filename}"
 
   sep
   bold "Starting: ${display_name}"
   echo "  File   : ${model_path}"
-  echo "  Params : --n-gpu-layers 999 --ctx-size 32768 --parallel 1 --port 8080"
+  echo "  Params : --n-gpu-layers 999 --ctx-size ${ctx_size} --parallel 1 --port 8080"
   sep
 
   # Activate oneAPI
@@ -120,7 +127,7 @@ start_server() {
     --port 8080 \
     --host 0.0.0.0 \
     --n-gpu-layers 999 \
-    --ctx-size 32768 \
+    --ctx-size "${ctx_size}" \
     --parallel 1
 }
 
@@ -154,14 +161,15 @@ show_download_prompt() {
 # ── Menu ─────────────────────────────────────────────────────────────────────
 
 show_menu() {
-  local -a avail_names=() avail_files=()
+  local -a avail_names=() avail_files=() avail_ctx=()
   local -a missing_names=() missing_files=() missing_repos=() missing_hffiles=() missing_sizes=()
 
   for entry in "${CATALOG[@]}"; do
-    IFS='|' read -r name file repo hffile size <<< "${entry}"
+    IFS='|' read -r name file repo hffile size ctx <<< "${entry}"
     if model_exists "${file}"; then
       avail_names+=("${name}")
       avail_files+=("${file}")
+      avail_ctx+=("${ctx}")
     else
       missing_names+=("${name}")
       missing_files+=("${file}")
@@ -173,7 +181,7 @@ show_menu() {
 
   sep
   bold "  llama-server launcher — Intel Arc 140V"
-  dim  "  --n-gpu-layers 999 --ctx-size 8192 --parallel 1 --port 8080"
+  dim  "  --n-gpu-layers 999 --parallel 1 --port 8080 (--ctx-size shown per model below)"
   sep
 
   local n=1
@@ -185,8 +193,8 @@ show_menu() {
     for i in "${!avail_names[@]}"; do
       local sz
       sz=$(model_size "${avail_files[$i]}")
-      printf "  %2d) \033[32m✓\033[0m  %-48s \033[2m%s\033[0m\n" \
-        "${n}" "${avail_names[$i]}" "${sz}"
+      printf "  %2d) \033[32m✓\033[0m  %-48s \033[2m%-8s ctx=%s\033[0m\n" \
+        "${n}" "${avail_names[$i]}" "${sz}" "${avail_ctx[$i]}"
       menu_type+=("avail")
       menu_idx+=("${i}")
       (( n++ ))
@@ -226,7 +234,7 @@ show_menu() {
           local type="${menu_type[$pos]}"
           local idx="${menu_idx[$pos]}"
           if [[ "${type}" == "avail" ]]; then
-            start_server "${avail_names[$idx]}" "${avail_files[$idx]}"
+            start_server "${avail_names[$idx]}" "${avail_files[$idx]}" "${avail_ctx[$idx]}"
           else
             show_download_prompt \
               "${missing_names[$idx]}" \
@@ -252,10 +260,10 @@ if [[ $# -ge 1 ]]; then
   # Match against catalog by filename or display name substring
   matched=false
   for entry in "${CATALOG[@]}"; do
-    IFS='|' read -r name file repo hffile size <<< "${entry}"
+    IFS='|' read -r name file repo hffile size ctx <<< "${entry}"
     if [[ "${file}" == "${arg}" || "${name}" == *"${arg}"* ]]; then
       if model_exists "${file}"; then
-        start_server "${name}" "${file}"
+        start_server "${name}" "${file}" "${ctx}"
       else
         show_download_prompt "${name}" "${repo}" "${hffile}" "${size}"
       fi

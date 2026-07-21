@@ -290,7 +290,7 @@ Every startup compiles SYCL kernels JIT for the Arc 140V Xe2 — this takes **2�
 
 ### 6.4 Startup script
 
-`~/llm/llama-cpp-arc/start-server.sh` is an interactive launcher, not a fixed one-model script — no need to have read §7.1 or §8.3 first, they're just where the model lineup and `benchmark.sh` (which shares this same catalog) are covered in more depth. With no arguments, it shows a menu listing every model in the catalog: available ones (✓, ready to start) and not-yet-downloaded ones (✗, with a ready-to-run `hf download` command and an interactive download prompt). Selecting an available model starts `llama-server` with the baseline params from §6.2 (`--n-gpu-layers 999 --ctx-size 8192 --parallel 1 --port 8080`).
+`~/llm/llama-cpp-arc/start-server.sh` is an interactive launcher, not a fixed one-model script — no need to have read §7.1 or §8.3 first, they're just where the model lineup and `benchmark.sh` (which shares this same catalog) are covered in more depth. With no arguments, it shows a menu listing every model in the catalog: available ones (✓, ready to start) and not-yet-downloaded ones (✗, with a ready-to-run `hf download` command and an interactive download prompt). Selecting an available model starts `llama-server` with `--n-gpu-layers 999 --parallel 1 --port 8080` plus a **per-model `--ctx-size`** (shown in the menu row): `65536` for the 7 models verified safe at that context (see §7.1's "Context window ceiling" table) — including `ornith-1.0-9b`, the current Hermes Agent backend — and `32768` for the 4 Qwen2.5-Coder/Qwen3 models, which clamp below that anyway and get memory-dangerous if pushed to 65536.
 
 ```bash
 chmod +x ~/llm/llama-cpp-arc/start-server.sh
@@ -401,14 +401,14 @@ hf download deepreinforce-ai/Ornith-1.0-9B-GGUF ornith-1.0-9b-Q6_K.gguf \
   --port 8080 \
   --host 0.0.0.0 \
   --n-gpu-layers 999 \
-  --ctx-size 32768 \
+  --ctx-size 65536 \
   --parallel 1 \
   --temp 0.6 \
   --top-p 0.95 \
   --top-k 20
 ```
 
-> The 262K context window is supported by the model but loading it fully requires ~20 GB of KV cache. In daily use, 32768 tokens is a practical ceiling that keeps memory pressure manageable.
+> The 262K context window is supported by the model, but loading it fully requires ~20 GB of KV cache alone. `65536` is verified safe (2026-07-21, §7.1's "Context window ceiling" table: 13 GiB `disponible` after load) — this is also the context `start-server.sh` now launches for this model. `131072` also serves (no clamp), but with a tighter margin (7.6 GiB `disponible`, 2.4 GiB swap) — only go there if a specific client genuinely needs it. This is the current backend for **Hermes Agent** (`nousresearch/hermes-agent`), which requires a minimum 64K context.
 
 **Available quantizations:**
 
