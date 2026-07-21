@@ -71,3 +71,16 @@ Stack-specific items for the llama.cpp native SYCL build on Intel Arc 140V.
       failure as Qwen3.6-27B (swap 7.8/8 GiB before the load even finished) — MoE's
       active-parameter advantage only helps decode speed, not resident memory. Full
       record in the guide's §7.3 and the `project-model-catalog-candidates` memory.
+
+- [x] **Validate Gemma-4-12B-IT as a Hermes Agent toolset backend** (`browser`/`web`/
+      `vision`/`computer_use`) — done 2026-07-21. **Passed** tool-calling (clean
+      `tool_calls` response), vision (correct image description via `--mmproj`), and a
+      single-turn vision+tool-calling proxy for `computer_use`. Required downloading
+      `mmproj-F16.gguf` (175 MB, not bundled in the main GGUF) — now wired into
+      `start-server.sh`'s catalog (7th field, mmproj filename, only set for
+      Gemma-4-12B). Full multi-turn `computer_use` loop still not tested. Toolsets
+      enabled in `~/.hermes/config.yaml`. **Ornith-1.0-9B stays the Hermes default**
+      despite this — a quality-baseline comparison showed Gemma-4-12B is more verbose
+      and got truncated mid-code-block on one of the 5 test prompts; switch to
+      Gemma-4-12B manually only when a task actually needs vision/browser/computer_use.
+      Full record in the `project-model-catalog-candidates` memory.

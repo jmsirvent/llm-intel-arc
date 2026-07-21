@@ -44,18 +44,23 @@ SERVER="${LLAMACPP_DIR}/build/bin/llama-server"
 # Qwen2.5-Coder/Qwen3 models stay at their proven 32768 — pushing them to 65536
 # clamps below that anyway and pushes memory into dangerous territory (see the
 # guide's §7.1 table and the project-model-catalog-candidates memory).
+# 7th field: mmproj filename (relative to models/), empty if none. Required for
+# image input on vision-capable models — llama-server otherwise rejects images
+# even though the base GGUF supports them (see the Hermes toolset validation in
+# the project-model-catalog-candidates memory). Only Gemma-4-12B has its
+# projector downloaded so far.
 CATALOG=(
-  "Phi-4-mini-Instruct Q4_K_M|microsoft_Phi-4-mini-instruct-Q4_K_M.gguf|bartowski/microsoft_Phi-4-mini-instruct-GGUF|microsoft_Phi-4-mini-instruct-Q4_K_M.gguf|2.5 GB|65536"
-  "Gemma-4-E2B Q4_K_M|gemma-4-E2B-it-Q4_K_M.gguf|unsloth/gemma-4-E2B-it-GGUF|gemma-4-E2B-it-Q4_K_M.gguf|3.1 GB|65536"
-  "Gemma-4-E4B Q4_K_M|gemma-4-E4B-it-Q4_K_M.gguf|unsloth/gemma-4-e4b-it-GGUF|gemma-4-E4B-it-Q4_K_M.gguf|4.9 GB|65536"
-  "DeepSeek-R1-Distill-Qwen-7B Q4_K_M|DeepSeek-R1-Distill-Qwen-7B-Q4_K_M.gguf|bartowski/DeepSeek-R1-Distill-Qwen-7B-GGUF|DeepSeek-R1-Distill-Qwen-7B-Q4_K_M.gguf|4.7 GB|65536"
-  "Qwen2.5-Coder-7B-Instruct Q4_K_M|Qwen2.5-Coder-7B-Instruct-Q4_K_M.gguf|bartowski/Qwen2.5-Coder-7B-Instruct-GGUF|Qwen2.5-Coder-7B-Instruct-Q4_K_M.gguf|4.7 GB|32768"
-  "Llama-3.1-8B-Instruct Q4_K_M|Meta-Llama-3.1-8B-Instruct-Q4_K_M.gguf|bartowski/Meta-Llama-3.1-8B-Instruct-GGUF|Meta-Llama-3.1-8B-Instruct-Q4_K_M.gguf|4.9 GB|65536"
-  "Qwen3-8B Q4_K_M|Qwen3-8B-Q4_K_M.gguf|unsloth/Qwen3-8B-GGUF|Qwen3-8B-Q4_K_M.gguf|5.2 GB|32768"
-  "Gemma-4-12B UD-Q4_K_XL|gemma-4-12b-it-UD-Q4_K_XL.gguf|unsloth/gemma-4-12b-it-GGUF|gemma-4-12b-it-UD-Q4_K_XL.gguf|7.4 GB|65536"
-  "Ornith-1.0-9B Q6_K|ornith-1.0-9b-Q6_K.gguf|deepreinforce-ai/Ornith-1.0-9B-GGUF|ornith-1.0-9b-Q6_K.gguf|7.4 GB|65536"
-  "Qwen3-14B Q4_K_M (optional)|Qwen3-14B-Q4_K_M.gguf|unsloth/Qwen3-14B-GGUF|Qwen3-14B-Q4_K_M.gguf|9.0 GB|32768"
-  "Qwen2.5-Coder-14B-Instruct Q4_K_M|Qwen2.5-Coder-14B-Instruct-Q4_K_M.gguf|bartowski/Qwen2.5-Coder-14B-Instruct-GGUF|Qwen2.5-Coder-14B-Instruct-Q4_K_M.gguf|9.0 GB|32768"
+  "Phi-4-mini-Instruct Q4_K_M|microsoft_Phi-4-mini-instruct-Q4_K_M.gguf|bartowski/microsoft_Phi-4-mini-instruct-GGUF|microsoft_Phi-4-mini-instruct-Q4_K_M.gguf|2.5 GB|65536|"
+  "Gemma-4-E2B Q4_K_M|gemma-4-E2B-it-Q4_K_M.gguf|unsloth/gemma-4-E2B-it-GGUF|gemma-4-E2B-it-Q4_K_M.gguf|3.1 GB|65536|"
+  "Gemma-4-E4B Q4_K_M|gemma-4-E4B-it-Q4_K_M.gguf|unsloth/gemma-4-e4b-it-GGUF|gemma-4-E4B-it-Q4_K_M.gguf|4.9 GB|65536|"
+  "DeepSeek-R1-Distill-Qwen-7B Q4_K_M|DeepSeek-R1-Distill-Qwen-7B-Q4_K_M.gguf|bartowski/DeepSeek-R1-Distill-Qwen-7B-GGUF|DeepSeek-R1-Distill-Qwen-7B-Q4_K_M.gguf|4.7 GB|65536|"
+  "Qwen2.5-Coder-7B-Instruct Q4_K_M|Qwen2.5-Coder-7B-Instruct-Q4_K_M.gguf|bartowski/Qwen2.5-Coder-7B-Instruct-GGUF|Qwen2.5-Coder-7B-Instruct-Q4_K_M.gguf|4.7 GB|32768|"
+  "Llama-3.1-8B-Instruct Q4_K_M|Meta-Llama-3.1-8B-Instruct-Q4_K_M.gguf|bartowski/Meta-Llama-3.1-8B-Instruct-GGUF|Meta-Llama-3.1-8B-Instruct-Q4_K_M.gguf|4.9 GB|65536|"
+  "Qwen3-8B Q4_K_M|Qwen3-8B-Q4_K_M.gguf|unsloth/Qwen3-8B-GGUF|Qwen3-8B-Q4_K_M.gguf|5.2 GB|32768|"
+  "Gemma-4-12B UD-Q4_K_XL|gemma-4-12b-it-UD-Q4_K_XL.gguf|unsloth/gemma-4-12b-it-GGUF|gemma-4-12b-it-UD-Q4_K_XL.gguf|7.4 GB|65536|mmproj-gemma-4-12b-F16.gguf"
+  "Ornith-1.0-9B Q6_K|ornith-1.0-9b-Q6_K.gguf|deepreinforce-ai/Ornith-1.0-9B-GGUF|ornith-1.0-9b-Q6_K.gguf|7.4 GB|65536|"
+  "Qwen3-14B Q4_K_M (optional)|Qwen3-14B-Q4_K_M.gguf|unsloth/Qwen3-14B-GGUF|Qwen3-14B-Q4_K_M.gguf|9.0 GB|32768|"
+  "Qwen2.5-Coder-14B-Instruct Q4_K_M|Qwen2.5-Coder-14B-Instruct-Q4_K_M.gguf|bartowski/Qwen2.5-Coder-14B-Instruct-GGUF|Qwen2.5-Coder-14B-Instruct-Q4_K_M.gguf|9.0 GB|32768|"
 )
 
 # ── Color helpers ─────────────────────────────────────────────────────────────
@@ -97,11 +102,22 @@ start_server() {
   local display_name="$1"
   local filename="$2"
   local ctx_size="${3:-32768}"
+  local mmproj="${4:-}"
   local model_path="${MODELS_DIR}/${filename}"
 
+  local -a mmproj_args=()
   sep
   bold "Starting: ${display_name}"
   echo "  File   : ${model_path}"
+  if [[ -n "${mmproj}" ]]; then
+    local mmproj_path="${MODELS_DIR}/${mmproj}"
+    if [[ ! -e "${mmproj_path}" ]]; then
+      red "ERROR: mmproj not found at ${mmproj_path}"
+      exit 1
+    fi
+    mmproj_args=(--mmproj "${mmproj_path}")
+    echo "  mmproj : ${mmproj_path}"
+  fi
   echo "  Params : --n-gpu-layers 999 --ctx-size ${ctx_size} --parallel 1 --port 8080"
   sep
 
@@ -124,6 +140,7 @@ start_server() {
 
   exec "${SERVER}" \
     -m "${model_path}" \
+    "${mmproj_args[@]}" \
     --port 8080 \
     --host 0.0.0.0 \
     --n-gpu-layers 999 \
@@ -161,15 +178,16 @@ show_download_prompt() {
 # ── Menu ─────────────────────────────────────────────────────────────────────
 
 show_menu() {
-  local -a avail_names=() avail_files=() avail_ctx=()
+  local -a avail_names=() avail_files=() avail_ctx=() avail_mmproj=()
   local -a missing_names=() missing_files=() missing_repos=() missing_hffiles=() missing_sizes=()
 
   for entry in "${CATALOG[@]}"; do
-    IFS='|' read -r name file repo hffile size ctx <<< "${entry}"
+    IFS='|' read -r name file repo hffile size ctx mmproj <<< "${entry}"
     if model_exists "${file}"; then
       avail_names+=("${name}")
       avail_files+=("${file}")
       avail_ctx+=("${ctx}")
+      avail_mmproj+=("${mmproj}")
     else
       missing_names+=("${name}")
       missing_files+=("${file}")
@@ -234,7 +252,7 @@ show_menu() {
           local type="${menu_type[$pos]}"
           local idx="${menu_idx[$pos]}"
           if [[ "${type}" == "avail" ]]; then
-            start_server "${avail_names[$idx]}" "${avail_files[$idx]}" "${avail_ctx[$idx]}"
+            start_server "${avail_names[$idx]}" "${avail_files[$idx]}" "${avail_ctx[$idx]}" "${avail_mmproj[$idx]}"
           else
             show_download_prompt \
               "${missing_names[$idx]}" \
@@ -260,10 +278,10 @@ if [[ $# -ge 1 ]]; then
   # Match against catalog by filename or display name substring
   matched=false
   for entry in "${CATALOG[@]}"; do
-    IFS='|' read -r name file repo hffile size ctx <<< "${entry}"
+    IFS='|' read -r name file repo hffile size ctx mmproj <<< "${entry}"
     if [[ "${file}" == "${arg}" || "${name}" == *"${arg}"* ]]; then
       if model_exists "${file}"; then
-        start_server "${name}" "${file}" "${ctx}"
+        start_server "${name}" "${file}" "${ctx}" "${mmproj}"
       else
         show_download_prompt "${name}" "${repo}" "${hffile}" "${size}"
       fi
