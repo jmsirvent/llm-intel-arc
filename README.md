@@ -46,6 +46,7 @@ Survey underpinning the `vllm-arc` evaluation tracked in `TODO.md`. The Arc 140V
 | koboldcpp / LM Studio | Both wrap the same llama.cpp SYCL/Vulkan backend already deployed natively; they add packaging overhead without new capability. |
 | MLC-LLM | Advertised Arc support is not corroborated by primary documentation or independent benchmarks; only generic Vulkan support exists, unverified on Xe2. |
 | llama.cpp with the Vulkan backend (`GGML_VULKAN=ON`) | Spiked 2026-07-02: builds and runs correctly on Xe2, but Qwen3-8B-Q4_K_M benchmarked at -35% prefill / -55% generation vs the existing SYCL build. Not a viable replacement or complement. Full record in [`llama-cpp-arc/vulkan-spike-notes.md`](llama-cpp-arc/vulkan-spike-notes.md). |
+| Native Ollama (v0.32.1, official release) | Spiked 2026-07-21: no SYCL backend in any stable release — `ollama/ollama#11160` (SYCL support) is still open/unmerged. The only GPU path is the Vulkan backend added in 0.12.x, and it's worse than llama.cpp's own Vulkan spike on the same model (Qwen3-8B-Q4_K_M: 132.65 prefill / 8.30 gen tok/s vs llama.cpp Vulkan's 215.92 / 7.35, both far below the SYCL baseline's 323 / 15.25). Also found: Ollama drops integrated GPUs by default, needs `OLLAMA_IGPU_ENABLE=1` to even attempt Vulkan on the Arc 140V. Not a viable candidate today — revisit once the SYCL PR merges into a stable release. |
 
 ### Candidates for validation (confirmable as of July 2026)
 
@@ -54,16 +55,15 @@ Ready for a hands-on validation spike on this hardware, with no known documentat
 | Option | Rationale | Reference |
 |---|---|---|
 | OpenVINO Model Server (OVMS) | First-party Intel Xe2 support, documented; exposes a native OpenAI-compatible API (`/v3/chat/completions`, `/models`) | [openvinotoolkit/model_server](https://github.com/openvinotoolkit/model_server) · [docs](https://docs.openvino.ai/2025/model-server/ovms_what_is_openvino_model_server.html) |
-| Native Ollama SYCL (v0.17+, independent of the IPEX-LLM fork) | Own SYCL implementation reported since 2026-02, decoupled from the archived fork; already exposes an OpenAI-compatible API | [ollama/ollama#8777](https://github.com/ollama/ollama/issues/8777) |
 | `optimum-intel` with IPEX | Actively maintained by Hugging Face, with documented GPU inference support; lacks a built-in OpenAI-compatible server, requiring a custom wrapper | [huggingface/optimum-intel](https://github.com/huggingface/optimum-intel) · [docs](https://docs.openvino.ai/2025/openvino-workflow-generative/inference-with-optimum-intel.html) |
 
-**Next step:** validate OpenVINO Model Server first (first-party Xe2 support, already OpenAI-compatible), then native Ollama SYCL — in that order, by validation cost.
+**Next step:** validate OpenVINO Model Server — the only remaining active-spike candidate (highest validation cost, but the strongest documented Xe2 support of all candidates found).
 
 ### Monitored (unconfirmed timeline)
 
 | Option | Condition for reconsideration |
 |---|---|
-| `llm-scaler` for client/iGPU hardware | Intel explicitly excludes consumer GPUs (Arc A770/B580) and iGPUs from current coverage; reassess if a future release extends support. |
+| `llm-scaler` for client/iGPU hardware | Intel explicitly excludes consumer GPUs (Arc A770/B580) and iGPUs from current coverage; reassess if a future release extends support. As of 2026-07-21, open PRs add Lunar Lake Xe2 iGPU compatibility reports/benchmarks and fix an iGPU-specific `profile_run()` hang — first concrete signal of movement, but no stable release with confirmed iGPU support yet. |
 | `vllm-openvino` | Deprioritized: no confirmed documentation blocker, but the repository shows low activity and no tagged releases. Candidates with stronger prospects are being validated first. Reassess if it gains releases and adoption, or if the prioritized candidates fail validation. |
 
 ## GPU monitoring
