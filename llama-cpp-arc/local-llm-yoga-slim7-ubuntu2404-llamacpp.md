@@ -356,6 +356,30 @@ Do not use unknown or unreviewed publishers outside these two categories.
 > Gemma-4-E4B: MatFormer architecture — 7.52B declared params but runs at the efficiency of a ~4B model. Fastest general-purpose model under 5 GiB (26.73 tok/s). Vocab matches Gemma-4-12B (`n_vocab = 262144` in both) but was never tested as a separate draft model in §8.4 — only its MTP head was tested (fails, `ctx_other` incompatibility, unrelated to vocab). Untested as a §8.4-style separate draft; given the Gemma-4-E2B result (net regression despite matching vocab), unlikely to be worth pursuing.
 > DeepSeek-R1-Distill-Qwen-7B: Qwen2 architecture distilled from DeepSeek-R1. Faster than Qwen3-8B for reasoning tasks with internal chain-of-thought (`<think>` blocks); shares tokenizer with Qwen2.5-Coder models.
 
+> **Context window ceiling, verified per model (2026-07-21):** requesting `--ctx-size` above a model's native training window does not error — llama.cpp clamps silently to `n_ctx_train`, logging only a low-visibility warning (`n_ctx_seq (N) > n_ctx_train (M) -- possible training context overflow`). Verified empirically across the whole catalog at 65536 and 131072 (driven by a downstream requirement: Hermes Agent needs a minimum 64K context backend).
+
+| Model | Real ctx @ 65536 request | Real ctx @ 131072 request | Memory risk @ 131072 |
+|---|---|---|---|
+| Gemma-4-E2B | 65536 | 131072 | none — 20 GiB disponible |
+| Gemma-4-E4B | 65536 | 131072 | none — 17 GiB disponible |
+| Gemma-4-12B | 65536 | 131072 | none — 12 GiB disponible |
+| Ornith-1.0-9B | 65536 | 131072 | moderate — 7.6 GiB disponible, 2.4 GiB swap |
+| DeepSeek-R1-Distill-Qwen-7B | 65536 | 131072 | moderate — 5.8 GiB disponible, 1.0 GiB swap |
+| Llama-3.1-8B-Instruct | 65536 (10 GiB disponible, safe) | 131072 | **dangerous** — 2.6 GiB disponible, swap 7.2/8 GiB (confirmed on a clean, swap-cleared baseline, not just cache accumulation) |
+| Phi-4-mini | 65536 (11 GiB disponible, safe) | 131072 | **dangerous** — 1.5 GiB disponible, swap 4/8 GiB (confirmed on a clean, swap-cleared baseline) |
+| Qwen2.5-Coder-7B | **32768 (clamped)** | 32768 (clamped) | n/a — needs YaRN to reach either target |
+| Qwen3-8B | **40960 (clamped)** | 40960 (clamped) | n/a — needs YaRN to reach either target |
+| Qwen2.5-Coder-14B | **32768 (clamped)** | 32768 (clamped) | dangerous even clamped — 1.8-2.0 GiB disponible already at the 65536 request |
+| Qwen3-14B | **40960 (clamped)** | 40960 (clamped) | dangerous even clamped — 2.8-3.2 GiB disponible already at the 65536 request |
+
+The entire Qwen2.5/Qwen3 line clamps because `n_ctx_train` is 32768/40960 respectively — reaching 64K+ on those needs explicit YaRN rope-scaling (`--rope-scaling yarn --yarn-orig-ctx <native>`), not tested in this pass.
+
+**Counter-intuitive finding:** Phi-4-mini (2.5 GB) and Llama-3.1-8B (4.9 GB) cost *more* memory at 131072 than Gemma-4-12B (7.4 GB, 3x heavier). Gemma-4's hybrid local/global attention (sliding window on most layers, full attention only on the final layer per block) scales its KV cache far more gently with context length than the standard full attention Llama/Phi use — at large context, attention architecture predicts memory cost better than parameter count does. Practical takeaway: for a 64K-128K-context client (e.g. Hermes Agent), prefer the Gemma-4 family over same-size-class dense models with standard attention.
+
+**Operational note:** memory pressure from these tests doesn't fully self-recover just from killing the server — swap usage in particular persists until pages are touched again. Between successive high-context load tests, run the full remediation from §12 ("RAM is not recovered after stopping the server"), not just `drop_caches` alone, to get a clean baseline.
+
+**The 4 Qwen models that fail this check are not deprecated.** The 64K requirement above is Hermes-specific, not a catalog-wide bar — `qwen2.5-coder-7b`/`14b` and `qwen3-8b`/`14b` remain the right pick for their existing roles (Cline autocomplete, tool-calling agentic chat, per the table above) at their native context (32768/40960), which every other client already using this catalog (OpenCode, Twinny, CodeGPT) works with fine without ever requesting 64K. Deleting them was considered and explicitly rejected (2026-07-21) — a new client's stricter requirement doesn't retroactively invalidate models already serving other clients correctly. Point Hermes at one of the 7 compliant models above; leave the rest of the catalog untouched.
+
 ### 7.2 Ornith-1.0-9B — specific configuration
 
 Ornith-1.0-9B ([GGUF repo](https://huggingface.co/deepreinforce-ai/Ornith-1.0-9B-GGUF)) is a dense 9B model based on Qwen 3.5, post-trained for agentic coding (SWE-Bench, Terminal-Bench, NL2Repo). It uses internal `<think>` reasoning blocks before answering — expect higher TTFT than a standard 9B model.
@@ -448,6 +472,30 @@ Qwen3-8B baseline (~130 MB) rather than multi-GB.
 The first load attempt (before this clean result) also surfaced a separate operational
 hazard — running a second model-loading process while one was already resident hung the
 `xe` driver and required a hard reboot. See the ⚠️ callout under "Memory budget" above.
+
+**Gemma-4-26B-A4B (MoE), `UD-Q4_K_M` — rejected 2026-07-21.** Not in the current catalog.
+MoE, 26B total / 3.8B active params, 256K native context. Google's Gemma-4 family has 5
+sizes, not the 3 already in the catalog (E2B/E4B/12B) — this and a dense 31B variant are
+the other two, both 256K native. `unsloth/gemma-4-26B-A4B-it-GGUF`, `UD-Q4_K_M`, 16.9 GiB.
+
+Predicted going in that the MoE architecture would fix the bandwidth-bound decode failure
+that rejected Qwen3.6-27B above (few active params/token → little memory traffic per step)
+but **not** the memory-ceiling risk (all 26B of expert weights resident regardless of
+activation count, same ~15-16 GiB disk-size class as Qwen3.6-27B's 15.65 GiB). Confirmed
+exactly that split: killed the `llama-bench` load mid-way, before it finished loading or
+produced a tok/s number, after live monitoring showed swap at 7.8/8 GiB (238 MiB free) and
+`disponible` at 6.8 GiB — the same danger signature as Qwen3.6-27B, reached even faster.
+
+**Root cause:** confirms the size-class ceiling from the Qwen3.6-27B rejection is
+architecture-independent — MoE's active-parameter advantage is a decode-*speed* property,
+not a resident-*memory* one. Anything in the ~15-17 GiB disk-size class hits the same wall
+on this machine regardless of dense vs. MoE, same logic already noted for the still-pending
+`Qwen3-Coder-30B-A3B-Instruct` candidate (≈18.7 GiB, even bigger — deprioritize further).
+
+**Revisit if:** available RAM on this machine increases materially, or a smaller quant
+(Q3_K, ~12.7-12.9 GiB) is tested with a confirmed clean ~20 GiB `disponible` baseline. The
+dense **Gemma-4-31B** (256K native, bigger than 26B-A4B) is not worth spiking on the same
+grounds without first confirming that extra headroom.
 
 ### 7.4 Downloading models
 

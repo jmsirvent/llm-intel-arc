@@ -60,3 +60,8 @@ Stack-specific items for the llama.cpp native SYCL build on Intel Arc 140V.
 
 - [ ] **Enable persistent SYCL cache** once `intel/llvm#21972` is fixed — reduces cold
       start from 2–5 min to near-instantaneous.
+
+- [x] **Spike Gemma-4-26B-A4B** — done 2026-07-21. **Rejected**: same memory-ceiling
+      failure as Qwen3.6-27B (swap 7.8/8 GiB before the load even finished) — MoE's
+      active-parameter advantage only helps decode speed, not resident memory. Full
+      record in the guide's §7.3 and the `project-model-catalog-candidates` memory.

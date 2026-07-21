@@ -89,6 +89,15 @@ little headroom for dense models above ~10-12 GB disk size. Also surfaced a sepa
 `xe` driver hang when two model-loading processes ran concurrently — never load two models
 at once on this hardware. Full rationale in
 [local-llm-yoga-slim7-ubuntu2404-llamacpp.md §7.3](local-llm-yoga-slim7-ubuntu2404-llamacpp.md#73-evaluated-and-rejected-models).
+**Gemma-4-26B-A4B** (MoE, 256K native context, 16.9 GiB) — also rejected: same memory-ceiling
+failure as Qwen3.6-27B, confirmed before the load even finished (swap 7.8/8 GiB). MoE's
+active-parameter advantage only helps decode speed, not resident memory — same §7.3.
+
+**Context window:** `--ctx-size` past a model's native training window clamps silently
+instead of erroring. Verified per catalog model at 65536 and 131072 — only the three Gemma-4
+models (E2B/E4B/12B) serve 131072 safely; the whole Qwen2.5-Coder/Qwen3 line clamps well
+below 64K without YaRN. Full table and per-model memory readings in
+[local-llm-yoga-slim7-ubuntu2404-llamacpp.md §7.1](local-llm-yoga-slim7-ubuntu2404-llamacpp.md#71-recommended-models-ggufs-from-hugging-face).
 
 ## IPEX-LLM baseline (previous stack, Flash Attention on, Q4\_K\_M)
 
