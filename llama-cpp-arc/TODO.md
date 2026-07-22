@@ -2,6 +2,11 @@
 
 Stack-specific items for the llama.cpp native SYCL build on Intel Arc 140V.
 
+**Development paused (2026-07-21) — waiting on upstream.** Still the production backend;
+no new spikes here until one of the reopen conditions below actually fires. Active
+evaluation effort moved to OpenVINO Model Server (`~/llm/README.md` §"Inference engine
+landscape", `project-vllm-arc-evaluation` memory).
+
 ## Bugs
 
 - [ ] **`SYCL_CACHE_PERSISTENT=1` crashes on first kernel dispatch** — `intel/llvm#21972`

@@ -18,7 +18,7 @@ Local LLM inference on Intel Arc 140V (Xe2) — Lenovo Yoga Slim 7, Ubuntu 24.04
 | Directory | Stack | Status |
 |---|---|---|
 | [`ipex-llm/`](ipex-llm/) | IPEX-LLM — Ollama SYCL fork, Docker | Production, frozen (archived upstream) |
-| [`llama-cpp-arc/`](llama-cpp-arc/) | llama.cpp native SYCL (no Docker) | In development |
+| [`llama-cpp-arc/`](llama-cpp-arc/) | llama.cpp native SYCL (no Docker) | Production, development paused (waiting on upstream — see `llama-cpp-arc/TODO.md`) |
 
 ## Architecture decision
 

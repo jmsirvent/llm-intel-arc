@@ -54,6 +54,14 @@ speculative decoding (found not viable on this hardware), model lineup, and VS C
 integration. Systemd autostart was considered and dropped — `start-server.sh` already covers
 starting the server, and every use case so far switches between models interactively.
 
+**Development paused (2026-07-21) — waiting on upstream.** Still the active production
+backend (Hermes Agent, VS Code clients, etc.) — nothing about day-to-day use changes. No
+further spikes/features planned here until upstream llama.cpp ships something worth
+re-testing (see `TODO.md` for the specific reopen conditions already tracked per item:
+SYCL cache-crash fix, Xe2 Flash Attention kernels). Active evaluation effort moved to
+OpenVINO Model Server — see `~/llm/README.md` §"Inference engine landscape" and the
+`project-vllm-arc-evaluation` memory.
+
 ## Development notes
 
 - oneAPI compiler packages use `apt.repos.intel.com/oneapi` — different from the GPU driver repo (`repositories.intel.com/gpu`) which does not work with Xe2
