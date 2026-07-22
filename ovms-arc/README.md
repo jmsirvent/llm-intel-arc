@@ -36,13 +36,16 @@ curl / OpenAI-compatible client
 
 ## Project status
 
-**In progress (started 2026-07-21).** Native binary install (no Docker), self-contained
-under this directory, no systemd unit. All 6 non-multimodal catalog models with an official
-`OpenVINO`-org conversion have been benchmarked for speed AND quality against the
-`llama-cpp-arc` SYCL baseline; vision has been validated on a non-Gemma4 model after the
-whole Gemma-4 family turned out blocked by an upstream bug. **Not a production decision
-yet** — long-context/multi-turn behavior is the only thing left unvalidated. See
-`../TODO.md` for the tracked next steps.
+**Spike complete (2026-07-21/22) — no remaining technical gap.** Native binary install (no
+Docker), self-contained under this directory, no systemd unit. All 6 non-multimodal catalog
+models with an official `OpenVINO`-org conversion have been benchmarked for speed AND
+quality against the `llama-cpp-arc` SYCL baseline; vision has been validated on a
+non-Gemma4 model after the whole Gemma-4 family turned out blocked by an upstream bug.
+Long-context/multi-turn behavior — the last item blocking a production decision — has now
+been checked too (see "Long-context and multi-turn behavior" below): OVMS resolves the
+real SYCL pain point for the realistic growing-session usage pattern. **The production
+switch itself is still a separate, unmade decision** — see `../TODO.md` for the tracked
+next steps.
 
 ## Quick start (once installed)
 
@@ -126,6 +129,25 @@ A non-Gemma4 architecture closes the gap instead:
 `Qwen3-VL-8B-Instruct-int4-ov` is the confirmed choice for any workload needing vision
 and/or tool-calling on OVMS. Full test transcripts in
 [local-llm-yoga-slim7-ubuntu2404-ovms.md §7](local-llm-yoga-slim7-ubuntu2404-ovms.md#7-vision-and-tool-calling).
+
+## Long-context and multi-turn behavior
+
+The one item this spike hadn't checked: `llama-cpp-arc` found real production pain from
+live Hermes usage — prefill degraded from ~177 to ~50 tok/s within a single 24.4K-token
+agentic prompt (5+ min just to process it). Tested the OVMS-equivalent with
+`context-test.sh` on `Qwen3-8B`:
+
+| Scenario | Result |
+|---|---|
+| Cold, single prompt, no caching (comparable to the SYCL finding) | 1,270 → 214 tok/s across 0→24.5K tokens — degrades proportionally about as much as SYCL, but **the worst OVMS point still beats SYCL's best point** |
+| Growing multi-turn session, prefix caching on (the real Hermes usage pattern) | Marginal per-turn rate stays flat (927–10,799 tok/s, noisy but no decay) up to ~22K accumulated tokens — full 12-turn session in 12.3s |
+
+**Verdict: the SYCL pain point doesn't reproduce on OVMS** when the client resends the full
+growing history each turn (exactly how Hermes behaves) — prefix caching absorbs the
+repeated-history cost. One new operational note: sustained long-context traffic pushed swap
+to near-full even on this 8B model (previously only seen on 14B-class models under
+short-prompt benchmarking) — same standard remediation clears it. Full methodology and
+tables: [local-llm-yoga-slim7-ubuntu2404-ovms.md §8](local-llm-yoga-slim7-ubuntu2404-ovms.md#8-long-context-and-multi-turn-behavior).
 
 ## Model coverage
 

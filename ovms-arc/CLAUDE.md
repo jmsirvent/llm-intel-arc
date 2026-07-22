@@ -16,6 +16,7 @@ ovms-arc/
 ├── start-server.sh             # interactive launcher — validated catalog, per-model flags, no separate download step
 ├── quality-test.sh             # 5-prompt quality battery, ported from ../llama-cpp-arc/ for OVMS's /v3/ API
 ├── quality-baselines/          # saved battery outputs per model, diff against ../llama-cpp-arc/quality-baselines/
+├── context-test.sh             # long-context/multi-turn prefill probe — cold degradation curve + growing-session test
 └── local-llm-yoga-slim7-ubuntu2404-ovms.md  # full install guide + benchmark tables, gotchas, verdicts
 ```
 
@@ -56,11 +57,16 @@ now-deleted `ollama-arc` spike's `11500`.
 
 ## Status
 
-**In progress.** 6/6 non-multimodal catalog models benchmarked for speed AND quality against
-the `llama-cpp-arc` SYCL baseline (no systematic quality winner — each engine has its own
-model-specific bugs); vision validated via a non-Gemma4 model after the whole Gemma-4 family
-turned out blocked by an upstream bug. Long-context/multi-turn behavior is the only thing
-left unvalidated — **no production decision made**.
+**Spike complete — no remaining technical gap.** 6/6 non-multimodal catalog models
+benchmarked for speed AND quality against the `llama-cpp-arc` SYCL baseline (no systematic
+quality winner — each engine has its own model-specific bugs); vision validated via a
+non-Gemma4 model after the whole Gemma-4 family turned out blocked by an upstream bug.
+Long-context/multi-turn behavior (2026-07-22, `context-test.sh`): OVMS resolves the SYCL
+pain point of per-turn slowdown in a growing agentic session (prefix caching absorbs the
+repeated-history cost, marginal rate doesn't decay up to ~22K tokens); even OVMS's cold/
+no-caching worst case (213.6 tok/s at 24.5K tokens) beats SYCL's best case (177 tok/s at
+2K tokens). **No production decision made yet** — that's a separate call, not a technical
+blocker anymore.
 Full results and verdicts: `local-llm-yoga-slim7-ubuntu2404-ovms.md`.
 
 ## Gotchas (found the hard way — not obvious from official docs)
@@ -98,3 +104,8 @@ Full results and verdicts: `local-llm-yoga-slim7-ubuntu2404-ovms.md`.
 - 14B-class models push swap to 4.7-6.2 GiB during load; smaller models are fine. Run the
   full remediation (`sync; echo 3 > /proc/sys/vm/drop_caches; swapoff -a; swapon -a`)
   after stopping a large model, same as documented for `llama-cpp-arc`.
+- **Swap pressure isn't just a 14B-class thing.** Sustained long-context traffic (many
+  requests with large/growing KV-cache allocations, e.g. `context-test.sh`) pushed swap to
+  7.9/8.0 GiB on an 8B model — the short-prompt load-and-benchmark cycle that produced the
+  "smaller models are fine" finding above doesn't exercise this path. Check swap during any
+  extended real session, not just at model load.

@@ -19,7 +19,8 @@
 6. [Model management and benchmarking](#6-model-management-and-benchmarking)
    - [6.4 Quality battery](#64-quality-battery-)
 7. [Vision and tool-calling](#7-vision-and-tool-calling)
-8. [Troubleshooting](#8-troubleshooting)
+8. [Long-context and multi-turn behavior](#8-long-context-and-multi-turn-behavior)
+9. [Troubleshooting](#9-troubleshooting)
 
 ---
 
@@ -407,7 +408,104 @@ and/or tool-calling on OVMS.**
 
 ---
 
-## 8. Troubleshooting
+## 8. Long-context and multi-turn behavior ✅
+
+### 8.1 Why this matters
+
+`../llama-cpp-arc/local-llm-yoga-slim7-ubuntu2404-llamacpp.md` §8.3 documents a real
+production pain point from live Hermes Agent usage on the SYCL backend: prefill throughput
+degraded continuously within a single 24,446-token agentic prompt, from ~177 tok/s at the
+start down to ~50 tok/s by the end — 5+ minutes just to process one prompt, before
+generating a single response token. OVMS's structurally different memory scheme (paged
+attention, dynamic KV-cache allocation, confirmed in §5.2 to handle large models far more
+gracefully at load time) was a plausible reason to expect better behavior here too, but
+that was never measured — this was the last item blocking a production decision (see
+`TODO.md`).
+
+### 8.2 Methodology — `context-test.sh`
+
+`./context-test.sh --model <id> --mode cold|multiturn|both` runs two independent
+measurements against a running server. Both use `max_tokens: 1` and
+`chat_template_kwargs.enable_thinking: false` to isolate prefill time from generation time,
+and calibrate prompt length against the *real* `usage.prompt_tokens` OVMS returns rather
+than assuming a fixed chars-per-token ratio.
+
+- **`cold`** — four independent single-shot requests at growing prompt sizes (~2K/8K/16K/24K
+  tokens). Requires `--enable_prefix_caching false` (§6.1) — each request is a genuinely
+  cold prefill from position 0, so subtracting consecutive checkpoints' (tokens,
+  elapsed_ms) approximates the *instantaneous* prefill rate at that context depth. This is
+  the number directly comparable to `llama-cpp-arc`'s 177→50 tok/s table.
+- **`multiturn`** — simulates a real growing agentic session: one fixed system prompt
+  (tool-schema-shaped filler), then 12 turns, each appending ~1800 new tokens and POSTing
+  the *full* growing message history every turn — exactly how a stateless chat client like
+  Hermes behaves. Requires prefix caching **on** (the default, `start-server.sh` with no
+  extra flags). If caching works as intended, each turn only pays for its own new tokens,
+  isolating the marginal per-turn prefill cost at increasing depth — the practically
+  relevant number for a persistent session.
+
+Model used: `OpenVINO/Qwen3-8B-int4-ov` — already benchmarked on both engines (§5.2), so
+results plug directly into the existing comparison.
+
+### 8.3 Cold degradation curve (no caching)
+
+| Token range | Instantaneous prefill rate |
+|---|---|
+| 0 → 2,057 | 1,269.8 tok/s |
+| 2,057 → 8,189 | 576.5 tok/s |
+| 8,189 → 16,358 | 245.0 tok/s |
+| 16,358 → 24,534 | 213.6 tok/s |
+
+Proportional degradation is comparable to SYCL's (~5.9× OVMS vs. ~3.5× SYCL from shallow to
+deep), but in absolute terms **OVMS's worst measured point (213.6 tok/s at 24.5K tokens)
+still beats SYCL's best measured point (177 tok/s in the first 2K tokens)**. There's no
+context depth in the tested range where SYCL catches up.
+
+### 8.4 Multi-turn session (prefix caching on — the real usage pattern)
+
+| Turn | Total tokens | Marginal rate (new tokens) |
+|---|---|---|
+| 1/12 | 1,867 | 1,513.0 tok/s |
+| 2/12 | 3,692 | 2,687.8 tok/s |
+| 3/12 | 5,517 | 3,162.9 tok/s |
+| 4/12 | 7,342 | 1,656.1 tok/s |
+| 5/12 | 9,167 | 1,118.3 tok/s |
+| 6/12 | 10,992 | 1,715.2 tok/s |
+| 7/12 | 12,817 | 927.8 tok/s |
+| 8/12 | 14,642 | 10,798.8 tok/s |
+| 9/12 | 16,467 | 1,605.1 tok/s |
+| 10/12 | 18,293 | 1,842.6 tok/s |
+| 11/12 | 20,119 | 2,374.5 tok/s |
+| 12/12 | 21,945 | 1,878.6 tok/s |
+
+**No degradation trend.** The marginal rate is noisy (927.8 to 10,798.8 tok/s) but flat —
+turn 12, at ~22K accumulated tokens, is not systematically slower than turn 1. The entire
+12-turn, ~22K-token session completed in 12.3 s total. This is the direct answer to the
+SYCL pain point in §8.1: when the client resends the full growing history every turn (the
+real Hermes usage pattern), prefix caching absorbs the cost of the repeated prefix and only
+the new tokens are ever paid for — at a rate that doesn't decay with depth.
+
+### 8.5 Operational note: swap pressure under sustained long-context load
+
+Running both tests back-to-back on this 8B model pushed swap to 7.9/8.0 GiB used —
+essentially full. §6.3 documented swap pressure as a 14B-class-only concern based on
+short-prompt load-and-benchmark cycles; sustained long-context traffic (repeated large
+KV-cache allocations across many requests) has a different memory profile and hits swap
+even at 8B scale. Standard remediation (§6.3) cleared it back to 0 B used. **Check swap
+during any extended real session, not just at model load, regardless of model size.**
+
+### 8.6 Verdict
+
+**Closes the last item in `TODO.md` blocking a production decision.** OVMS resolves the
+specific SYCL pain point (progressive per-turn slowdown in a growing agentic session) for
+the realistic usage pattern, and even its cold/no-caching worst case beats SYCL's best case
+throughout the tested range. Combined with §5-7 (prefill/generation speed, quality parity,
+vision+tool-calling), there is no remaining technical gap between OVMS and SYCL on any
+criterion evaluated in this spike — the production-switch decision itself is a separate
+call, not made here.
+
+---
+
+## 9. Troubleshooting
 
 ### `ModuleNotFoundError: No module named 'pyovms'`
 

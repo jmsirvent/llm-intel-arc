@@ -18,16 +18,22 @@ For stack-specific items see the `TODO.md` inside each subdirectory.
             by default (`OLLAMA_IGPU_ENABLE=1` required). Full record in `README.md`
             §"Inference engine landscape" and the `project-vllm-arc-evaluation` memory.
             Revisit once the SYCL PR merges into a stable release.
-      - [ ] OpenVINO Model Server (OVMS) — **in progress (2026-07-21/22).** Prefill beats
-            SYCL unconditionally (+114% to +350%, all 6 non-multimodal catalog models);
-            generation gain is architecture-dependent (+9-13% typical, Qwen3-8B +42%
-            outlier, Phi-4-mini −5.7% regression). Whole Gemma-4 family blocked by an
-            upstream bug ([model_server#4178](https://github.com/openvinotoolkit/model_server/issues/4178)),
+      - [x] OpenVINO Model Server (OVMS) — spike complete 2026-07-21/22, **no remaining
+            technical gap.** Prefill beats SYCL unconditionally (+114% to +350%, all 6
+            non-multimodal catalog models); generation gain is architecture-dependent
+            (+9-13% typical, Qwen3-8B +42% outlier, Phi-4-mini −5.7% regression). Whole
+            Gemma-4 family blocked by an upstream bug
+            ([model_server#4178](https://github.com/openvinotoolkit/model_server/issues/4178)),
             but `Qwen3-VL-8B-Instruct` delivers working vision + tool-calling together.
             Quality battery run against all 6 models (diffed vs the SYCL baselines): no
-            systematic winner. **Next:** long-context/multi-turn check — the only thing
-            left blocking a production decision. `llama-cpp-arc/` stays paused meanwhile
-            (still the production backend). Project docs: [`ovms-arc/README.md`](ovms-arc/README.md) ·
+            systematic winner. Long-context/multi-turn check (2026-07-22, `context-test.sh`,
+            Qwen3-8B): the SYCL pain point (prefill degrading 177→50 tok/s within one
+            24.4K-token agentic prompt) **doesn't reproduce on OVMS** for the realistic
+            growing-session pattern — prefix caching keeps the marginal per-turn rate flat
+            up to ~22K tokens; even OVMS's cold/no-caching worst case beats SYCL's best case.
+            **Production-switch decision still open** — not made here, and `llama-cpp-arc/`
+            stays paused but remains the production backend meanwhile. Project docs:
+            [`ovms-arc/README.md`](ovms-arc/README.md) ·
             [`ovms-arc/local-llm-yoga-slim7-ubuntu2404-ovms.md`](ovms-arc/local-llm-yoga-slim7-ubuntu2404-ovms.md) ·
             [`ovms-arc/TODO.md`](ovms-arc/TODO.md).
       - Parked/monitored, no action: `vllm-openvino` (low activity, no tagged releases),

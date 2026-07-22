@@ -53,7 +53,7 @@ Survey underpinning the `vllm-arc` evaluation tracked in `TODO.md`. The Arc 140V
 
 | Option | Status |
 |---|---|
-| OpenVINO Model Server (OVMS) | Spiked 2026-07-21/22, native install, self-contained under [`ovms-arc/`](ovms-arc/). Prefill beats SYCL unconditionally (+114% to +350% across all 6 non-multimodal catalog models tested); generation gain is architecture-dependent (+9-13% typical, Qwen3-8B +42% outlier, Phi-4-mini −5.7% regression). Whole Gemma-4 family blocked by an upstream OVMS bug, but `Qwen3-VL-8B-Instruct` delivers working vision + tool-calling together. Quality battery run against all 6 models (diffed vs the SYCL baselines): no systematic winner — each engine has its own model-specific bugs, half the models show no difference at all. Long-context behavior is the only thing still unvalidated. Full record: [`ovms-arc/local-llm-yoga-slim7-ubuntu2404-ovms.md`](ovms-arc/local-llm-yoga-slim7-ubuntu2404-ovms.md). |
+| OpenVINO Model Server (OVMS) | Spiked 2026-07-21/22, native install, self-contained under [`ovms-arc/`](ovms-arc/). **No remaining technical gap.** Prefill beats SYCL unconditionally (+114% to +350% across all 6 non-multimodal catalog models tested); generation gain is architecture-dependent (+9-13% typical, Qwen3-8B +42% outlier, Phi-4-mini −5.7% regression). Whole Gemma-4 family blocked by an upstream OVMS bug, but `Qwen3-VL-8B-Instruct` delivers working vision + tool-calling together. Quality battery run against all 6 models (diffed vs the SYCL baselines): no systematic winner — each engine has its own model-specific bugs, half the models show no difference at all. Long-context/multi-turn check (2026-07-22): the SYCL pain point (prefill degrading 177→50 tok/s within one 24.4K-token agentic prompt) doesn't reproduce on OVMS for the realistic growing-session pattern — prefix caching keeps the marginal per-turn rate flat up to ~22K tokens, and even OVMS's cold/no-caching worst case beats SYCL's best case. Full record: [`ovms-arc/local-llm-yoga-slim7-ubuntu2404-ovms.md`](ovms-arc/local-llm-yoga-slim7-ubuntu2404-ovms.md). |
 
 ### Candidates for validation (confirmable as of July 2026)
 
@@ -63,7 +63,7 @@ Ready for a hands-on validation spike on this hardware, with no known documentat
 |---|---|---|
 | `optimum-intel` with IPEX | Actively maintained by Hugging Face, with documented GPU inference support; lacks a built-in OpenAI-compatible server, requiring a custom wrapper | [huggingface/optimum-intel](https://github.com/huggingface/optimum-intel) · [docs](https://docs.openvino.ai/2025/openvino-workflow-generative/inference-with-optimum-intel.html) |
 
-**Next step:** run a quality-battery comparison and check long-context/multi-turn behavior on the strongest OVMS candidates before considering any production change — see `ovms-arc/TODO.md`.
+**Next step:** all technical validation for OVMS is done (speed, quality, vision/tool-calling, long-context/multi-turn) — what remains is the production-switch decision itself, not further spiking. See `ovms-arc/TODO.md`.
 
 ### Monitored (unconfirmed timeline)
 

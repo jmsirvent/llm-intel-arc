@@ -50,11 +50,18 @@ landscape"). `../llama-cpp-arc/` remains the production backend throughout.
       `project-vllm-arc-evaluation` memory. Quality no longer blocks a production
       decision — only long-context behavior does now.
 
-- [ ] **Check long-context / multi-turn behavior** — `llama-cpp-arc`'s real operational
-      pain point (prefill degrading ~177→50 tok/s within a single 24.4K-token agentic
-      prompt, see its `local-llm-yoga-slim7-ubuntu2404-llamacpp.md` §8.3) has no
-      OVMS-equivalent measurement yet. OVMS's paged-attention design is a plausible reason
-      to expect better behavior, but that's unverified. **Blocking a production decision.**
+- [x] **Check long-context / multi-turn behavior** — done 2026-07-22 with the new
+      `context-test.sh`, model `Qwen3-8B`. Cold, single-prompt, no-caching curve (comparable
+      to `llama-cpp-arc`'s 177→50 tok/s finding): 1,270→214 tok/s across 0→24.5K tokens —
+      degrades proportionally about as much, but OVMS's worst point still beats SYCL's best.
+      Growing multi-turn session with prefix caching on (the real Hermes usage pattern):
+      marginal per-turn rate stays flat (no decay) up to ~22K accumulated tokens. **The SYCL
+      pain point doesn't reproduce on OVMS for the realistic usage pattern.** New
+      operational note: sustained long-context traffic pushed swap to near-full even on this
+      8B model — previously only seen on 14B-class models (see `CLAUDE.md` Gotchas). Full
+      tables and methodology in `local-llm-yoga-slim7-ubuntu2404-ovms.md` §8. **This was the
+      last item blocking a production decision — no technical blocker remains.** The
+      production-switch call itself is still open, tracked at `../TODO.md`.
 
 ## Ideas
 
