@@ -1,5 +1,12 @@
 # TODO — ovms-arc
 
+**Spike closed 2026-07-22 — staying on `llama-cpp-arc`.** OVMS won every raw performance
+metric tested (see the Improvements section below); the decision not to switch came from a
+Hermes-fit check, not performance — full rationale in `CLAUDE.md`'s Status section and
+`README.md`. Remaining items below are kept for the record and for whoever reopens this
+(e.g. if the Gemma-4 upstream bug closes, or `Ornith`/`Gemma-4-12B` ever gets an OVMS
+conversion) — not active work.
+
 Stack-specific items for the OpenVINO Model Server spike (candidate 3 of the
 inference-engine evaluation, see `../TODO.md` and `../README.md` §"Inference engine
 landscape"). `../llama-cpp-arc/` remains the production backend throughout.
@@ -60,13 +67,27 @@ landscape"). `../llama-cpp-arc/` remains the production backend throughout.
       operational note: sustained long-context traffic pushed swap to near-full even on this
       8B model — previously only seen on 14B-class models (see `CLAUDE.md` Gotchas). Full
       tables and methodology in `local-llm-yoga-slim7-ubuntu2404-ovms.md` §8. **This was the
-      last item blocking a production decision — no technical blocker remains.** The
-      production-switch call itself is still open, tracked at `../TODO.md`.
+      last item blocking a production decision — no technical blocker remains.**
+
+- [x] **Check whether OVMS actually fits Hermes Agent, the real production client** — done
+      2026-07-22. Three disqualifying facts, found in this order: (1) `Ornith-1.0-9B` and
+      `Gemma-4-12B` have no OVMS conversion (known since day one, see Ideas below — just not
+      treated as decision-ending until this check ran); (2) Hermes hard-requires ≥64,000
+      tokens of context, which `Qwen3-8B`/`14B` (40,960) and both `Qwen2.5-Coder` sizes
+      (32,768) fail regardless of backend; (3) of the models that do clear 64K,
+      `Qwen2.5-VL-7B-Instruct` has no tool parser and `DeepSeek-R1-Distill-Qwen-7B`, given a
+      real tool schema, fabricated a fake result instead of calling it (confirmed via direct
+      request). Only `Qwen3-VL-8B-Instruct` clears both bars, but it was only ever validated
+      for vision/tool-calling, never as a general daily driver. **Decision: keep
+      `Ornith-1.0-9B` + `Gemma-4-12B` on `llama-cpp-arc`, close this spike.** The
+      client/tool-choice question this raised (what pairs well with OVMS for lighter task
+      profiles) moved to its own project:
+      [`llm-tooling-landscape`](https://github.com/jmsirvent/llm-tooling-landscape).
 
 ## Ideas
 
-- [ ] **Close the Llama-3.1-8B-Instruct / Gemma-4-12B coverage gap** — neither has a
-      trusted pre-converted `OpenVINO/*-int4-ov` model (only unverified community
-      conversions). Revisit if a trusted quantizer (bartowski/unsloth/lmstudio-community/
-      original publisher) publishes one, or accept a local `optimum-intel` conversion if
-      these two specifically become important to the vision/tool-calling use case later.
+- [ ] **Close the Llama-3.1-8B-Instruct / Gemma-4-12B / Ornith-1.0-9B coverage gap** —
+      none has a trusted pre-converted `OpenVINO/*-int4-ov` model (`Llama-3.1`/`Gemma-4-12B`:
+      only unverified community conversions; `Ornith`: no conversion anywhere). This is the
+      #1 reason the production decision above didn't move to OVMS — revisit if a trusted
+      quantizer publishes one, or if `Ornith`'s publisher does an OpenVINO release.

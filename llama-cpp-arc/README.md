@@ -34,13 +34,17 @@ VS Code (Twinny / Cline / Roo Code) · Open WebUI · Python scripts
 
 ## Project status
 
-**Development paused (2026-07-21) — waiting on upstream.** Production use continues
-unchanged (this is still the active inference backend, e.g. for Hermes Agent); no further
-spikes or feature work planned here until upstream llama.cpp changes something worth
-re-validating (SYCL cache-crash fix, Xe2 Flash Attention kernels, etc. — see `TODO.md` for
-the specific reopen triggers already tracked per item). Active evaluation effort moved to
-OpenVINO Model Server (candidate 3 of the inference-engine spike, see
-`~/llm/README.md` §"Inference engine landscape").
+**Settled as the production backend (2026-07-22).** The OVMS evaluation (`../ovms-arc/`)
+closed without a switch — OVMS won on raw performance, but this stack's production models
+(`Ornith-1.0-9B`, `Gemma-4-12B`) have no OVMS conversion, and Hermes Agent's own
+context-window requirement ruled out the OVMS-covered alternatives. Full rationale:
+`../ovms-arc/CLAUDE.md`.
+
+**Development still separately paused (since 2026-07-21) — waiting on upstream.** No
+further spikes or feature work planned here until upstream llama.cpp changes something
+worth re-validating (SYCL cache-crash fix, Xe2 Flash Attention kernels, etc. — see
+`TODO.md` for the specific reopen triggers already tracked per item). Production use
+(Hermes Agent, VS Code clients) is unaffected either way.
 
 > Sections pending validation are marked with ⚠️ in the full guide.
 

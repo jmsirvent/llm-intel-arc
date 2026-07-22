@@ -57,16 +57,39 @@ now-deleted `ollama-arc` spike's `11500`.
 
 ## Status
 
-**Spike complete — no remaining technical gap.** 6/6 non-multimodal catalog models
-benchmarked for speed AND quality against the `llama-cpp-arc` SYCL baseline (no systematic
-quality winner — each engine has its own model-specific bugs); vision validated via a
-non-Gemma4 model after the whole Gemma-4 family turned out blocked by an upstream bug.
-Long-context/multi-turn behavior (2026-07-22, `context-test.sh`): OVMS resolves the SYCL
-pain point of per-turn slowdown in a growing agentic session (prefix caching absorbs the
-repeated-history cost, marginal rate doesn't decay up to ~22K tokens); even OVMS's cold/
-no-caching worst case (213.6 tok/s at 24.5K tokens) beats SYCL's best case (177 tok/s at
-2K tokens). **No production decision made yet** — that's a separate call, not a technical
-blocker anymore.
+**Closed (2026-07-22) — decision: stay on `llama-cpp-arc`, not because of performance.**
+6/6 non-multimodal catalog models benchmarked for speed AND quality against the SYCL
+baseline (no systematic quality winner — each engine has its own model-specific bugs);
+vision validated via a non-Gemma4 model; long-context/multi-turn behavior tested with
+`context-test.sh` and found to resolve SYCL's per-turn-slowdown pain point outright (even
+OVMS's cold/no-caching worst case, 213.6 tok/s at 24.5K tokens, beats SYCL's best case, 177
+tok/s at 2K tokens). **On every raw engine metric, OVMS won.** The decision to close this
+spike without switching came from a different, later check: fitting OVMS to the actual
+production client (Hermes Agent), not to a synthetic benchmark. Three disqualifying facts,
+in the order they were found:
+
+1. **No OVMS conversion exists for `Ornith-1.0-9B`** (current production default) or
+   `Gemma-4-12B` (production vision/tool-calling model) — this was known from day one of
+   the spike (see §"Model coverage" below) but wasn't treated as decision-ending until the
+   Hermes-fit check ran.
+2. **Hermes Agent hard-requires ≥64,000 tokens of context** on any model — a product-level
+   check, not configurable around. `Qwen3-8B`/`Qwen3-14B` (40,960) and the Qwen2.5-Coder
+   pair (32,768) all fail it regardless of backend.
+3. Of the OVMS models that do clear 64K, tool-calling reliability ruled out the rest:
+   `Qwen2.5-VL-7B-Instruct` has no matching `--tool_parser`; `DeepSeek-R1-Distill-Qwen-7B`,
+   given a real tool schema, skipped the tool entirely and fabricated a plausible-looking
+   fake result instead of calling it (confirmed via direct request, not assumed). Only
+   `Qwen3-VL-8B-Instruct` clears both context and tool-calling — but it was only ever
+   validated for the vision/tool-calling role, never as a general daily-driver model, so
+   betting the whole production default on it was judged not worth it against an
+   already-proven, already-in-production alternative (`Ornith-1.0-9B` + `Gemma-4-12B` on
+   `llama-cpp-arc`).
+
+**What carries forward:** the client/agent-tool question this raised (what should pair with
+OVMS, or with a future backend, for lighter task profiles that don't need Hermes's full
+feature set) moved to its own project —
+[`llm-tooling-landscape`](https://github.com/jmsirvent/llm-tooling-landscape) — since it's
+no longer specific to this machine or this backend.
 Full results and verdicts: `local-llm-yoga-slim7-ubuntu2404-ovms.md`.
 
 ## Gotchas (found the hard way — not obvious from official docs)

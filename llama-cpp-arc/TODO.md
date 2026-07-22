@@ -2,10 +2,12 @@
 
 Stack-specific items for the llama.cpp native SYCL build on Intel Arc 140V.
 
-**Development paused (2026-07-21) — waiting on upstream.** Still the production backend;
-no new spikes here until one of the reopen conditions below actually fires. Active
-evaluation effort moved to OpenVINO Model Server (`~/llm/README.md` §"Inference engine
-landscape", `project-vllm-arc-evaluation` memory).
+**Settled as the production backend (2026-07-22)** — the OVMS evaluation closed without a
+switch (`../ovms-arc/CLAUDE.md` has the full rationale: no OVMS conversion for `Ornith`/
+`Gemma-4-12B`, Hermes's context-window requirement ruling out the alternatives).
+
+**Development still separately paused (since 2026-07-21) — waiting on upstream.** No new
+spikes here until one of the reopen conditions below actually fires.
 
 ## Bugs
 

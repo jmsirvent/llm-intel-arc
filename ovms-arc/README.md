@@ -36,16 +36,19 @@ curl / OpenAI-compatible client
 
 ## Project status
 
-**Spike complete (2026-07-21/22) — no remaining technical gap.** Native binary install (no
-Docker), self-contained under this directory, no systemd unit. All 6 non-multimodal catalog
-models with an official `OpenVINO`-org conversion have been benchmarked for speed AND
-quality against the `llama-cpp-arc` SYCL baseline; vision has been validated on a
-non-Gemma4 model after the whole Gemma-4 family turned out blocked by an upstream bug.
-Long-context/multi-turn behavior — the last item blocking a production decision — has now
-been checked too (see "Long-context and multi-turn behavior" below): OVMS resolves the
-real SYCL pain point for the realistic growing-session usage pattern. **The production
-switch itself is still a separate, unmade decision** — see `../TODO.md` for the tracked
-next steps.
+**Closed (2026-07-22) — staying on `llama-cpp-arc`.** Not a performance verdict: OVMS won
+every raw engine metric tested here (prefill unconditionally, generation mostly ahead,
+long-context/multi-turn behavior — see below — resolves the exact pain point SYCL has
+today). The decision came from fitting OVMS to the actual production client instead:
+`Ornith-1.0-9B` (the current default) and `Gemma-4-12B` (the current vision/tool-calling
+model) have no OVMS conversion at all; Hermes Agent hard-requires ≥64,000 tokens of context,
+which every OVMS-covered alternative either fails outright or only clears alongside a
+tool-calling reliability problem (`Qwen2.5-VL`: no parser; `DeepSeek-R1-Distill-Qwen-7B`:
+fabricates results instead of calling tools). The one model that clears both
+(`Qwen3-VL-8B-Instruct`) was never validated as a general daily-driver, only for
+vision/tool-calling specifically — not enough to justify replacing an already-proven setup.
+Full rationale: `CLAUDE.md` Status section. The tool/client question this raised moved to
+its own project: [`llm-tooling-landscape`](https://github.com/jmsirvent/llm-tooling-landscape).
 
 ## Quick start (once installed)
 

@@ -18,8 +18,13 @@ Local LLM inference on Intel Arc 140V (Xe2) — Lenovo Yoga Slim 7, Ubuntu 24.04
 | Directory | Stack | Status |
 |---|---|---|
 | [`ipex-llm/`](ipex-llm/) | IPEX-LLM — Ollama SYCL fork, Docker | Production, frozen (archived upstream) |
-| [`llama-cpp-arc/`](llama-cpp-arc/) | llama.cpp native SYCL (no Docker) | Production, development paused (waiting on upstream — see `llama-cpp-arc/TODO.md`) |
-| [`ovms-arc/`](ovms-arc/) | OpenVINO Model Server (no Docker) | Spike in progress — candidate 3 of the inference-engine evaluation, not production |
+| [`llama-cpp-arc/`](llama-cpp-arc/) | llama.cpp native SYCL (no Docker) | **Production, settled** — the OVMS spike closed 2026-07-22 without a switch (see `ovms-arc/`); development still paused pending upstream (`llama-cpp-arc/TODO.md`) |
+| [`ovms-arc/`](ovms-arc/) | OpenVINO Model Server (no Docker) | Spike closed 2026-07-22 — won every performance metric, not adopted (Hermes-fit gap, see `ovms-arc/CLAUDE.md`) |
+
+Sibling project (separate repo, not a subdirectory here):
+[`llm-tooling-landscape`](https://github.com/jmsirvent/llm-tooling-landscape) — client/agent
+tool evaluation (feature matrix, multi-hardware fit) that grew out of the OVMS spike's
+Hermes-fit findings but isn't specific to this machine or backend.
 
 ## Architecture decision
 
@@ -49,11 +54,11 @@ Survey underpinning the `vllm-arc` evaluation tracked in `TODO.md`. The Arc 140V
 | llama.cpp with the Vulkan backend (`GGML_VULKAN=ON`) | Spiked 2026-07-02: builds and runs correctly on Xe2, but Qwen3-8B-Q4_K_M benchmarked at -35% prefill / -55% generation vs the existing SYCL build. Not a viable replacement or complement. Full record in [`llama-cpp-arc/vulkan-spike-notes.md`](llama-cpp-arc/vulkan-spike-notes.md). |
 | Native Ollama (v0.32.1, official release) | Spiked 2026-07-21: no SYCL backend in any stable release — `ollama/ollama#11160` (SYCL support) is still open/unmerged. The only GPU path is the Vulkan backend added in 0.12.x, and it's worse than llama.cpp's own Vulkan spike on the same model (Qwen3-8B-Q4_K_M: 132.65 prefill / 8.30 gen tok/s vs llama.cpp Vulkan's 215.92 / 7.35, both far below the SYCL baseline's 323 / 15.25). Also found: Ollama drops integrated GPUs by default, needs `OLLAMA_IGPU_ENABLE=1` to even attempt Vulkan on the Arc 140V. Not a viable candidate today — revisit once the SYCL PR merges into a stable release. |
 
-### In progress — strong result, not yet a production decision
+### Evaluated and closed — won on performance, not adopted
 
 | Option | Status |
 |---|---|
-| OpenVINO Model Server (OVMS) | Spiked 2026-07-21/22, native install, self-contained under [`ovms-arc/`](ovms-arc/). **No remaining technical gap.** Prefill beats SYCL unconditionally (+114% to +350% across all 6 non-multimodal catalog models tested); generation gain is architecture-dependent (+9-13% typical, Qwen3-8B +42% outlier, Phi-4-mini −5.7% regression). Whole Gemma-4 family blocked by an upstream OVMS bug, but `Qwen3-VL-8B-Instruct` delivers working vision + tool-calling together. Quality battery run against all 6 models (diffed vs the SYCL baselines): no systematic winner — each engine has its own model-specific bugs, half the models show no difference at all. Long-context/multi-turn check (2026-07-22): the SYCL pain point (prefill degrading 177→50 tok/s within one 24.4K-token agentic prompt) doesn't reproduce on OVMS for the realistic growing-session pattern — prefix caching keeps the marginal per-turn rate flat up to ~22K tokens, and even OVMS's cold/no-caching worst case beats SYCL's best case. Full record: [`ovms-arc/local-llm-yoga-slim7-ubuntu2404-ovms.md`](ovms-arc/local-llm-yoga-slim7-ubuntu2404-ovms.md). |
+| OpenVINO Model Server (OVMS) | Spiked 2026-07-21/22, closed 2026-07-22. Won every raw metric tested: prefill beats SYCL unconditionally (+114% to +350% across all 6 non-multimodal catalog models), generation mostly ahead (+9-13% typical, Qwen3-8B +42% outlier, Phi-4-mini −5.7% regression), quality battery a wash, and long-context/multi-turn behavior resolves SYCL's exact per-turn-slowdown pain point (prefix caching keeps the marginal rate flat to ~22K tokens; even OVMS's cold worst case beats SYCL's best case). **Not adopted anyway** — a later fit check against the actual production client (Hermes Agent) found `Ornith-1.0-9B`/`Gemma-4-12B` have no OVMS conversion, Hermes hard-requires ≥64K context (rules out `Qwen3-8B/14B`, `Qwen2.5-Coder`), and of what's left `Qwen2.5-VL` has no tool parser while `DeepSeek-R1-Distill-Qwen-7B` fabricates results instead of calling tools. Whole Gemma-4 family separately blocked by an upstream OVMS bug. Full record: [`ovms-arc/CLAUDE.md`](ovms-arc/CLAUDE.md) · [`ovms-arc/local-llm-yoga-slim7-ubuntu2404-ovms.md`](ovms-arc/local-llm-yoga-slim7-ubuntu2404-ovms.md). |
 
 ### Candidates for validation (confirmable as of July 2026)
 
@@ -63,7 +68,10 @@ Ready for a hands-on validation spike on this hardware, with no known documentat
 |---|---|---|
 | `optimum-intel` with IPEX | Actively maintained by Hugging Face, with documented GPU inference support; lacks a built-in OpenAI-compatible server, requiring a custom wrapper | [huggingface/optimum-intel](https://github.com/huggingface/optimum-intel) · [docs](https://docs.openvino.ai/2025/openvino-workflow-generative/inference-with-optimum-intel.html) |
 
-**Next step:** all technical validation for OVMS is done (speed, quality, vision/tool-calling, long-context/multi-turn) — what remains is the production-switch decision itself, not further spiking. See `ovms-arc/TODO.md`.
+**Next step:** none active here — the inference-engine landscape is settled for this
+machine (`llama-cpp-arc`, no challenger adopted). The question OVMS's evaluation raised
+(which client/agent tool fits which task, independent of backend) continues in
+[`llm-tooling-landscape`](https://github.com/jmsirvent/llm-tooling-landscape), not here.
 
 ### Monitored (unconfirmed timeline)
 

@@ -62,6 +62,9 @@ while [[ $# -gt 0 ]]; do
     --mode)
       [[ $# -lt 2 ]] && { echo "ERROR: --mode requires cold|multiturn|both" >&2; exit 1; }
       MODE="$2"; shift 2 ;;
+    --cold-targets)
+      [[ $# -lt 2 ]] && { echo "ERROR: --cold-targets requires a comma-separated token list" >&2; exit 1; }
+      IFS=',' read -ra COLD_TARGETS <<< "$2"; shift 2 ;;
     -h|--help) usage ;;
     *) echo "Unknown option: $1" >&2; exit 1 ;;
   esac
@@ -83,6 +86,15 @@ chat() {
   curl -sf "http://localhost:${PORT}/v3/chat/completions" \
     -H "Content-Type: application/json" \
     -d "{\"model\":\"${MODEL}\",\"temperature\":0,\"max_tokens\":1,\"chat_template_kwargs\":{\"enable_thinking\":false},\"messages\":${1}}"
+}
+
+# chat_raw(outfile, content_json_array) -> prints HTTP status code, body goes to outfile.
+# Unlike chat(), never fails on a non-200 — used where the response itself (context exceeded,
+# OOM, etc.) is the thing being tested, not an error to abort on.
+chat_raw() {
+  curl -s -o "$1" -w "%{http_code}" "http://localhost:${PORT}/v3/chat/completions" \
+    -H "Content-Type: application/json" \
+    -d "{\"model\":\"${MODEL}\",\"temperature\":0,\"max_tokens\":1,\"chat_template_kwargs\":{\"enable_thinking\":false},\"messages\":$2}"
 }
 
 now_ms() { date +%s%3N; }
@@ -120,11 +132,24 @@ run_cold() {
     w="$(awk -v t="${target}" -v r="${wpt}" 'BEGIN { printf "%d", t*r }')"
     local msg
     msg="[{\"role\":\"user\",\"content\":\"$(words "${w}")Question: reply with a single word.\"}]"
-    local t0 t1 resp tokens elapsed
+    local t0 t1 resp_file http_code tokens elapsed
+    resp_file="$(mktemp)"
     t0="$(now_ms)"
-    resp="$(chat "${msg}")" || { red "  FAILED at target ${target}"; exit 1; }
+    http_code="$(chat_raw "${resp_file}" "${msg}" || echo "000")"
     t1="$(now_ms)"
-    tokens="$(jq -r '.usage.prompt_tokens' <<< "${resp}")"
+    if [[ "${http_code}" != "200" ]]; then
+      red "  FAILED at target ${target} (~${w} filler words) — HTTP ${http_code}"
+      yellow "  Response body: $(head -c 500 "${resp_file}" 2>/dev/null)"
+      rm -f "${resp_file}"
+      yellow "  Stopping the cold sweep here — this is the breaking point, not a transient error."
+      break
+    fi
+    tokens="$(jq -r '.usage.prompt_tokens // "null"' "${resp_file}")"
+    rm -f "${resp_file}"
+    if [[ "${tokens}" == "null" ]]; then
+      red "  FAILED at target ${target} — HTTP 200 but no usage.prompt_tokens in response"
+      break
+    fi
     elapsed=$(( t1 - t0 ))
 
     local rate

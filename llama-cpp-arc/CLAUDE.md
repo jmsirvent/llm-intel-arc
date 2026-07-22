@@ -54,13 +54,17 @@ speculative decoding (found not viable on this hardware), model lineup, and VS C
 integration. Systemd autostart was considered and dropped — `start-server.sh` already covers
 starting the server, and every use case so far switches between models interactively.
 
-**Development paused (2026-07-21) — waiting on upstream.** Still the active production
-backend (Hermes Agent, VS Code clients, etc.) — nothing about day-to-day use changes. No
-further spikes/features planned here until upstream llama.cpp ships something worth
-re-testing (see `TODO.md` for the specific reopen conditions already tracked per item:
-SYCL cache-crash fix, Xe2 Flash Attention kernels). Active evaluation effort moved to
-OpenVINO Model Server — see `~/llm/README.md` §"Inference engine landscape" and the
-`project-vllm-arc-evaluation` memory.
+**Settled as the production backend (2026-07-22)** — the OVMS evaluation (`../ovms-arc/`)
+closed without a switch: OVMS won every raw performance metric tested, but `Ornith-1.0-9B`
+and `Gemma-4-12B` (this stack's production models) have no OVMS conversion, and Hermes
+Agent's own ≥64K-context requirement ruled out every OVMS-covered alternative that could
+otherwise stand in. Full rationale: `../ovms-arc/CLAUDE.md` Status section.
+
+**Development still paused (since 2026-07-21) — waiting on upstream**, independent of the
+above: no further spikes/features planned here until upstream llama.cpp ships something
+worth re-testing (see `TODO.md` for the specific reopen conditions already tracked per item:
+SYCL cache-crash fix, Xe2 Flash Attention kernels). Day-to-day use (Hermes Agent, VS Code
+clients) is unaffected either way.
 
 ## Development notes
 

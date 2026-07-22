@@ -18,23 +18,27 @@ For stack-specific items see the `TODO.md` inside each subdirectory.
             by default (`OLLAMA_IGPU_ENABLE=1` required). Full record in `README.md`
             §"Inference engine landscape" and the `project-vllm-arc-evaluation` memory.
             Revisit once the SYCL PR merges into a stable release.
-      - [x] OpenVINO Model Server (OVMS) — spike complete 2026-07-21/22, **no remaining
-            technical gap.** Prefill beats SYCL unconditionally (+114% to +350%, all 6
-            non-multimodal catalog models); generation gain is architecture-dependent
-            (+9-13% typical, Qwen3-8B +42% outlier, Phi-4-mini −5.7% regression). Whole
-            Gemma-4 family blocked by an upstream bug
-            ([model_server#4178](https://github.com/openvinotoolkit/model_server/issues/4178)),
-            but `Qwen3-VL-8B-Instruct` delivers working vision + tool-calling together.
-            Quality battery run against all 6 models (diffed vs the SYCL baselines): no
-            systematic winner. Long-context/multi-turn check (2026-07-22, `context-test.sh`,
-            Qwen3-8B): the SYCL pain point (prefill degrading 177→50 tok/s within one
-            24.4K-token agentic prompt) **doesn't reproduce on OVMS** for the realistic
-            growing-session pattern — prefix caching keeps the marginal per-turn rate flat
-            up to ~22K tokens; even OVMS's cold/no-caching worst case beats SYCL's best case.
-            **Production-switch decision still open** — not made here, and `llama-cpp-arc/`
-            stays paused but remains the production backend meanwhile. Project docs:
-            [`ovms-arc/README.md`](ovms-arc/README.md) ·
-            [`ovms-arc/local-llm-yoga-slim7-ubuntu2404-ovms.md`](ovms-arc/local-llm-yoga-slim7-ubuntu2404-ovms.md) ·
+      - [x] OpenVINO Model Server (OVMS) — spike **closed 2026-07-22, decision: stay on
+            `llama-cpp-arc`.** Not a performance verdict — OVMS won every raw metric tested:
+            prefill beats SYCL unconditionally (+114% to +350%, all 6 non-multimodal catalog
+            models), generation mostly ahead (+9-13% typical, Qwen3-8B +42% outlier,
+            Phi-4-mini −5.7% regression), quality battery a wash, and long-context/multi-turn
+            behavior (`context-test.sh`) resolves SYCL's exact per-turn-slowdown pain point
+            (marginal rate flat to ~22K tokens with prefix caching; even OVMS's cold worst
+            case beats SYCL's best case). **Decided against switching anyway**, on a
+            Hermes-fit check run last: `Ornith-1.0-9B` (production default) and `Gemma-4-12B`
+            (production vision/tool-calling model) have no OVMS conversion; Hermes
+            hard-requires ≥64K context, which rules out `Qwen3-8B/14B` and both
+            `Qwen2.5-Coder` sizes; of what's left, `Qwen2.5-VL` has no tool parser and
+            `DeepSeek-R1-Distill-Qwen-7B` fabricates fake results instead of calling tools.
+            `llama-cpp-arc/` resumes as the settled production backend, no longer "paused
+            pending evaluation." Whole Gemma-4 family also independently blocked by an
+            upstream bug ([model_server#4178](https://github.com/openvinotoolkit/model_server/issues/4178)).
+            The client/tool-choice question this raised (what should pair with OVMS, or any
+            future backend, for lighter task profiles) moved to its own project:
+            [`llm-tooling-landscape`](https://github.com/jmsirvent/llm-tooling-landscape).
+            Full rationale: [`ovms-arc/README.md`](ovms-arc/README.md) ·
+            [`ovms-arc/CLAUDE.md`](ovms-arc/CLAUDE.md) ·
             [`ovms-arc/TODO.md`](ovms-arc/TODO.md).
       - Parked/monitored, no action: `vllm-openvino` (low activity, no tagged releases),
         `llm-scaler` (Intel excludes client/iGPU hardware for now; watch — open PRs as of
