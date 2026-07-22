@@ -20,35 +20,36 @@ landscape"). `../llama-cpp-arc/` remains the production backend throughout.
   are present.
 
   **Workaround:** none. Use `Qwen3-VL-8B-Instruct-int4-ov` instead for vision/tool-calling
-  needs — confirmed fully working (§6 of `ovms-spike-notes.md`).
+  needs — confirmed fully working (§7.3 of `local-llm-yoga-slim7-ubuntu2404-ovms.md`).
 
   **Reopen when:** the upstream issue closes with a confirmed fix, then re-test
-  `Gemma-4-E2B`/`E4B` per the exact repro steps in `ovms-spike-notes.md` §5.
+  `Gemma-4-E2B`/`E4B` per the exact repro steps in `local-llm-yoga-slim7-ubuntu2404-ovms.md` §7.1.
 
 ## Improvements
 
 - [x] **Benchmark all 6 non-multimodal catalog models with an official OVMS conversion** —
       done 2026-07-21/22. Prefill wins unconditionally (+114% to +350%); generation is
       architecture-dependent, not size-dependent (+9-13% "normal", Qwen3-8B anomaly +42%,
-      Phi-4-mini regression -5.7%). Full table and methodology in `ovms-spike-notes.md` §4.
+      Phi-4-mini regression -5.7%). Full table and methodology in
+      `local-llm-yoga-slim7-ubuntu2404-ovms.md` §5.2/§6.
 
 - [x] **Validate vision on OVMS** — done 2026-07-22. Whole Gemma-4 family ruled out (see
       Bugs above); `Qwen3-VL-8B-Instruct-int4-ov` confirmed working for vision AND
-      tool-calling combined (`--tool_parser hermes3`). Full record in `ovms-spike-notes.md`
-      §5-6.
+      tool-calling combined (`--tool_parser hermes3`). Full record in
+      `local-llm-yoga-slim7-ubuntu2404-ovms.md` §7.
 
 - [ ] **Run a quality battery on the strongest text candidates** (Qwen3-8B first — the
       biggest generation-speed outlier, worth confirming the speed gain isn't hiding a
       quality regression; then Qwen2.5-Coder-7B/14B as the "normal" case). Port
       `../llama-cpp-arc/quality-test.sh`'s 5-prompt battery — needs adapting for OVMS's
-      `/v3/` API surface, not just pointing at a different port. **Blocking a production
-      decision** — see `ovms-spike-notes.md` §7.
+      `/v3/` API surface, not just pointing at a different port (see `../llama-cpp-arc/`
+      §8.5 for the pattern this is based on). **Blocking a production decision.**
 
 - [ ] **Check long-context / multi-turn behavior** — `llama-cpp-arc`'s real operational
       pain point (prefill degrading ~177→50 tok/s within a single 24.4K-token agentic
-      prompt) has no OVMS-equivalent measurement yet. OVMS's paged-attention design is a
-      plausible reason to expect better behavior, but that's unverified. **Blocking a
-      production decision** — see `ovms-spike-notes.md` §7.
+      prompt, see its `local-llm-yoga-slim7-ubuntu2404-llamacpp.md` §8.3) has no
+      OVMS-equivalent measurement yet. OVMS's paged-attention design is a plausible reason
+      to expect better behavior, but that's unverified. **Blocking a production decision.**
 
 ## Ideas
 

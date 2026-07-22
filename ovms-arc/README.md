@@ -44,7 +44,7 @@ blocked by an upstream bug. **Not a production decision yet** — quality (not j
 and long-context/multi-turn behavior remain unvalidated. See `../TODO.md` for the tracked
 next steps.
 
-## Quick start
+## Quick start (once installed)
 
 ```bash
 cd ovms-arc/ovms
@@ -58,6 +58,8 @@ export PYTHONPATH="$(pwd)/lib/python:${PYTHONPATH:-}"
 curl http://127.0.0.1:9000/v3/models
 ```
 
+For the install steps (download, checksum, extract) see
+[local-llm-yoga-slim7-ubuntu2404-ovms.md §3](local-llm-yoga-slim7-ubuntu2404-ovms.md#3-ovms-native-binary-install).
 See `CLAUDE.md` for the full gotcha list before relying on this (PYTHONPATH requirement,
 prefix-caching default, VLM pipeline detection, tool-parser coverage).
 
@@ -79,7 +81,8 @@ cluster around a modest but real **+9% to +13%**; Qwen3-8B is a striking positiv
 (smallest model tested) is the only regression. No clean size trend explains the spread —
 don't quote a single blanket percentage for "OVMS vs SYCL" without checking the specific
 model's architecture. Full methodology, per-model raw numbers, and GPU-residency
-confirmation (`xpu-smi` on every run) in `ovms-spike-notes.md`.
+confirmation (`xpu-smi` on every run) in
+[local-llm-yoga-slim7-ubuntu2404-ovms.md §5-6](local-llm-yoga-slim7-ubuntu2404-ovms.md#5-recommended-models).
 
 **Memory, not just speed:** Qwen3-14B loaded with 11 GiB `disponible` on OVMS vs.
 llama.cpp SYCL's documented "dangerous" 1.8-3.2 GiB on the same model — OVMS's
@@ -99,7 +102,8 @@ A non-Gemma4 architecture closes the gap instead:
 | **Qwen3-VL-8B-Instruct** | ✅ works | ✅ **works** (`--tool_parser hermes3`) |
 
 `Qwen3-VL-8B-Instruct-int4-ov` is the confirmed choice for any workload needing vision
-and/or tool-calling on OVMS. Full test transcripts in `ovms-spike-notes.md`.
+and/or tool-calling on OVMS. Full test transcripts in
+[local-llm-yoga-slim7-ubuntu2404-ovms.md §7](local-llm-yoga-slim7-ubuntu2404-ovms.md#7-vision-and-tool-calling).
 
 ## Model coverage
 
@@ -112,8 +116,8 @@ from this spike rather than either lowering that bar or reintroducing a local
 
 ## Full documentation
 
-→ **[ovms-spike-notes.md](ovms-spike-notes.md)**
+→ **[local-llm-yoga-slim7-ubuntu2404-ovms.md](local-llm-yoga-slim7-ubuntu2404-ovms.md)**
 
-Covers: native install steps, every benchmark run with raw numbers and methodology notes,
-the Gemma4 VLM bug investigation (including the failed `graph.pbtxt` workaround attempt),
-the tool-parser findings, and the open questions blocking a production decision.
+Covers: prerequisites, native binary install, server configuration and startup, model
+catalog and benchmarking methodology, vision/tool-calling, and troubleshooting — same
+structure as `../llama-cpp-arc/local-llm-yoga-slim7-ubuntu2404-llamacpp.md`.

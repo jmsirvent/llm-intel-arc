@@ -2,7 +2,7 @@
 
 Candidate 3 of the inference-engine spike (after llama.cpp Vulkan and Ollama, both ruled
 out). Hardware and ecosystem context in `../CLAUDE.md`.
-Full spike record: `ovms-spike-notes.md`
+Full guide: `local-llm-yoga-slim7-ubuntu2404-ovms.md`
 
 ## Project structure
 
@@ -13,7 +13,7 @@ ovms-arc/
 │   ├── bin/ovms                # the server binary
 │   ├── lib/                    # bundled shared libs + lib/python/ (pyovms module)
 │   └── models/OpenVINO/<repo>/ # models pulled via --source_model, kept between sessions
-└── ovms-spike-notes.md         # full benchmark tables, gotchas, verdicts
+└── local-llm-yoga-slim7-ubuntu2404-ovms.md  # full install guide + benchmark tables, gotchas, verdicts
 ```
 
 No systemd unit, no Docker — native binary, self-contained, isolated from `../llama-cpp-arc/`.
@@ -54,7 +54,7 @@ now-deleted `ollama-arc` spike's `11500`.
 against the `llama-cpp-arc` SYCL baseline; vision validated via a non-Gemma4 model after the
 whole Gemma-4 family turned out blocked by an upstream bug. Quality battery and
 long-context/multi-turn behavior not yet validated — **no production decision made**.
-Full results and verdicts: `ovms-spike-notes.md`.
+Full results and verdicts: `local-llm-yoga-slim7-ubuntu2404-ovms.md`.
 
 ## Gotchas (found the hard way — not obvious from official docs)
 

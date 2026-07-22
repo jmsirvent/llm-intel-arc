@@ -27,7 +27,7 @@ For stack-specific items see the `TODO.md` inside each subdirectory.
             **Next:** quality battery + long-context check — not enough data yet for a
             production decision. `llama-cpp-arc/` stays paused meanwhile (still the
             production backend). Project docs: [`ovms-arc/README.md`](ovms-arc/README.md) ·
-            [`ovms-arc/ovms-spike-notes.md`](ovms-arc/ovms-spike-notes.md) ·
+            [`ovms-arc/local-llm-yoga-slim7-ubuntu2404-ovms.md`](ovms-arc/local-llm-yoga-slim7-ubuntu2404-ovms.md) ·
             [`ovms-arc/TODO.md`](ovms-arc/TODO.md).
       - Parked/monitored, no action: `vllm-openvino` (low activity, no tagged releases),
         `llm-scaler` (Intel excludes client/iGPU hardware for now; watch — open PRs as of
