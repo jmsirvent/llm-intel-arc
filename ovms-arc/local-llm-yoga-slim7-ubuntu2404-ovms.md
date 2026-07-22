@@ -136,12 +136,23 @@ export PYTHONPATH="$(pwd)/lib/python:${PYTHONPATH:-}"      # the pyovms module
 
 ### 4.2 Start the server
 
+**Interactive launcher (recommended)** — `start-server.sh` (same role as
+`../llama-cpp-arc/start-server.sh`): validated catalog, correct per-model flags applied
+automatically, no separate download step (OVMS pulls missing models itself).
+
+```bash
+./start-server.sh                 # interactive menu
+./start-server.sh Qwen3-8B         # by name substring
+./start-server.sh OpenVINO/<repo>  # explicit source_model repo id, even if not in the catalog
+```
+
+**Manual equivalent**, for flags not in the catalog:
+
 ```bash
 ./bin/ovms --source_model OpenVINO/Qwen3-8B-int4-ov \
   --model_repository_path ./models \
   --target_device GPU \
   --task text_generation \
-  --enable_prefix_caching false \
   --rest_port 9000
 ```
 
@@ -149,12 +160,13 @@ export PYTHONPATH="$(pwd)/lib/python:${PYTHONPATH:-}"      # the pyovms module
   `--model_repository_path` on first launch; subsequent launches skip the download and
   reuse the local copy.
 - `--target_device GPU` — without this OVMS defaults to CPU.
-- `--enable_prefix_caching false` — see §6.1 before removing this; it changes benchmark
-  numbers, not just a minor knob.
+- `--enable_prefix_caching false` — only for benchmarking (see §6.1); leave it out for
+  normal use, caching helps real workloads with repeated context.
 - `--rest_port 9000` — this project's convention (`llama-cpp-arc` uses `8080`, the deleted
   `ollama-arc` spike used `11500`).
 - Add `--tool_parser hermes3` (or another value from §7) when the workload needs
-  tool-calling — see §7 for which models actually support it.
+  tool-calling — see §7 for which models actually support it. `start-server.sh` already
+  adds this automatically for `Qwen3-VL-8B-Instruct`.
 
 ### 4.3 Verify
 

@@ -13,6 +13,7 @@ ovms-arc/
 │   ├── bin/ovms                # the server binary
 │   ├── lib/                    # bundled shared libs + lib/python/ (pyovms module)
 │   └── models/OpenVINO/<repo>/ # models pulled via --source_model, kept between sessions
+├── start-server.sh             # interactive launcher — validated catalog, per-model flags, no separate download step
 ├── quality-test.sh             # 5-prompt quality battery, ported from ../llama-cpp-arc/ for OVMS's /v3/ API
 ├── quality-baselines/          # saved battery outputs per model, diff against ../llama-cpp-arc/quality-baselines/
 └── local-llm-yoga-slim7-ubuntu2404-ovms.md  # full install guide + benchmark tables, gotchas, verdicts
@@ -23,18 +24,21 @@ No systemd unit, no Docker — native binary, self-contained, isolated from `../
 ## Development commands
 
 ```bash
-# Every invocation needs both of these set first (see "Gotchas" below)
+# Interactive launcher (menu, or by name/repo) — validated catalog, correct per-model flags
+./start-server.sh
+./start-server.sh Qwen3-8B
+./start-server.sh OpenVINO/Qwen3-VL-8B-Instruct-int4-ov
+
+# Manual equivalent, if you need flags not in start-server.sh's catalog
 cd ovms-arc/ovms
 export LD_LIBRARY_PATH="$(pwd)/lib:${LD_LIBRARY_PATH:-}"
 export PYTHONPATH="$(pwd)/lib/python:${PYTHONPATH:-}"
 
-# Serve a model pulled fresh from the official OpenVINO HF org (auto-downloads if missing)
 ./bin/ovms --source_model OpenVINO/<model>-int4-ov \
   --model_repository_path ./models --target_device GPU --task text_generation \
-  --enable_prefix_caching false --rest_port 9000
-
-# Add for tool-calling (pick the parser matching the model family — see reference.md):
-  --tool_parser hermes3   # covers Qwen3 family
+  --rest_port 9000
+  # add --tool_parser hermes3 for Qwen3-family tool-calling (see reference.md for other
+  # families); add --enable_prefix_caching false only when benchmarking, see Gotchas below
 
 # Verify
 curl http://127.0.0.1:9000/v3/models
@@ -52,10 +56,11 @@ now-deleted `ollama-arc` spike's `11500`.
 
 ## Status
 
-**In progress.** 6/6 non-multimodal catalog models with an official conversion benchmarked
-against the `llama-cpp-arc` SYCL baseline; vision validated via a non-Gemma4 model after the
-whole Gemma-4 family turned out blocked by an upstream bug. Quality battery and
-long-context/multi-turn behavior not yet validated — **no production decision made**.
+**In progress.** 6/6 non-multimodal catalog models benchmarked for speed AND quality against
+the `llama-cpp-arc` SYCL baseline (no systematic quality winner — each engine has its own
+model-specific bugs); vision validated via a non-Gemma4 model after the whole Gemma-4 family
+turned out blocked by an upstream bug. Long-context/multi-turn behavior is the only thing
+left unvalidated — **no production decision made**.
 Full results and verdicts: `local-llm-yoga-slim7-ubuntu2404-ovms.md`.
 
 ## Gotchas (found the hard way — not obvious from official docs)

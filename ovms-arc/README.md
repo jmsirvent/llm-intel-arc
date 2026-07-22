@@ -47,15 +47,29 @@ yet** — long-context/multi-turn behavior is the only thing left unvalidated. S
 ## Quick start (once installed)
 
 ```bash
+./start-server.sh                 # interactive menu — pick from the validated catalog
+./start-server.sh Qwen3-8B         # by name substring
+./start-server.sh OpenVINO/<repo>  # explicit source_model repo id
+```
+
+Handles `LD_LIBRARY_PATH`/`PYTHONPATH`, the per-model flags validated in this project (e.g.
+`--tool_parser hermes3` only for `Qwen3-VL-8B-Instruct`), and pulls the model automatically
+via `--source_model` if it isn't downloaded yet — no separate download step like
+`llama-cpp-arc`'s launcher needs, OVMS handles that itself.
+
+Equivalent manual command, if you need to run it by hand (e.g. with flags not in the
+catalog):
+
+```bash
 cd ovms-arc/ovms
 export LD_LIBRARY_PATH="$(pwd)/lib:${LD_LIBRARY_PATH:-}"
 export PYTHONPATH="$(pwd)/lib/python:${PYTHONPATH:-}"
 
 ./bin/ovms --source_model OpenVINO/Qwen3-8B-int4-ov \
   --model_repository_path ./models --target_device GPU --task text_generation \
-  --enable_prefix_caching false --rest_port 9000
+  --rest_port 9000
 
-curl http://127.0.0.1:9000/v3/models
+curl http://127.0.0.1:9000/v3/models   # verify once started
 ```
 
 For the install steps (download, checksum, extract) see
