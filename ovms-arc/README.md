@@ -38,11 +38,11 @@ curl / OpenAI-compatible client
 
 **In progress (started 2026-07-21).** Native binary install (no Docker), self-contained
 under this directory, no systemd unit. All 6 non-multimodal catalog models with an official
-`OpenVINO`-org conversion have been benchmarked against the `llama-cpp-arc` SYCL baseline;
-vision has been validated on a non-Gemma4 model after the whole Gemma-4 family turned out
-blocked by an upstream bug. **Not a production decision yet** — quality (not just speed)
-and long-context/multi-turn behavior remain unvalidated. See `../TODO.md` for the tracked
-next steps.
+`OpenVINO`-org conversion have been benchmarked for speed AND quality against the
+`llama-cpp-arc` SYCL baseline; vision has been validated on a non-Gemma4 model after the
+whole Gemma-4 family turned out blocked by an upstream bug. **Not a production decision
+yet** — long-context/multi-turn behavior is the only thing left unvalidated. See
+`../TODO.md` for the tracked next steps.
 
 ## Quick start (once installed)
 
@@ -83,6 +83,14 @@ don't quote a single blanket percentage for "OVMS vs SYCL" without checking the 
 model's architecture. Full methodology, per-model raw numbers, and GPU-residency
 confirmation (`xpu-smi` on every run) in
 [local-llm-yoga-slim7-ubuntu2404-ovms.md §5-6](local-llm-yoga-slim7-ubuntu2404-ovms.md#5-recommended-models).
+
+**Quality: no systematic winner.** Ran a 5-prompt battery (`quality-test.sh`) against all 6
+models above, diffed against the existing SYCL baselines. Each engine has its own
+model-specific bugs — SYCL got a math problem wrong on Phi-4-mini; OVMS has a `fib(0)=1`
+bug and a broken divide-by-zero fix on Qwen3-8B, and returns zero content on one
+DeepSeek-R1-Distill prompt where SYCL completes. Half the models (Qwen3-14B, both
+Qwen2.5-Coder sizes) show no quality difference at all. Full per-model table in
+[local-llm-yoga-slim7-ubuntu2404-ovms.md §6.4](local-llm-yoga-slim7-ubuntu2404-ovms.md#64-quality-battery-).
 
 **Memory, not just speed:** Qwen3-14B loaded with 11 GiB `disponible` on OVMS vs.
 llama.cpp SYCL's documented "dangerous" 1.8-3.2 GiB on the same model — OVMS's

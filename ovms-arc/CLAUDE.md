@@ -13,6 +13,8 @@ ovms-arc/
 │   ├── bin/ovms                # the server binary
 │   ├── lib/                    # bundled shared libs + lib/python/ (pyovms module)
 │   └── models/OpenVINO/<repo>/ # models pulled via --source_model, kept between sessions
+├── quality-test.sh             # 5-prompt quality battery, ported from ../llama-cpp-arc/ for OVMS's /v3/ API
+├── quality-baselines/          # saved battery outputs per model, diff against ../llama-cpp-arc/quality-baselines/
 └── local-llm-yoga-slim7-ubuntu2404-ovms.md  # full install guide + benchmark tables, gotchas, verdicts
 ```
 

@@ -24,9 +24,10 @@ For stack-specific items see the `TODO.md` inside each subdirectory.
             outlier, Phi-4-mini −5.7% regression). Whole Gemma-4 family blocked by an
             upstream bug ([model_server#4178](https://github.com/openvinotoolkit/model_server/issues/4178)),
             but `Qwen3-VL-8B-Instruct` delivers working vision + tool-calling together.
-            **Next:** quality battery + long-context check — not enough data yet for a
-            production decision. `llama-cpp-arc/` stays paused meanwhile (still the
-            production backend). Project docs: [`ovms-arc/README.md`](ovms-arc/README.md) ·
+            Quality battery run against all 6 models (diffed vs the SYCL baselines): no
+            systematic winner. **Next:** long-context/multi-turn check — the only thing
+            left blocking a production decision. `llama-cpp-arc/` stays paused meanwhile
+            (still the production backend). Project docs: [`ovms-arc/README.md`](ovms-arc/README.md) ·
             [`ovms-arc/local-llm-yoga-slim7-ubuntu2404-ovms.md`](ovms-arc/local-llm-yoga-slim7-ubuntu2404-ovms.md) ·
             [`ovms-arc/TODO.md`](ovms-arc/TODO.md).
       - Parked/monitored, no action: `vllm-openvino` (low activity, no tagged releases),

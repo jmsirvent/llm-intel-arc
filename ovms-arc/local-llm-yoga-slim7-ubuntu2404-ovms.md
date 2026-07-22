@@ -17,6 +17,7 @@
 4. [`ovms` — configuration and startup](#4-ovms--configuration-and-startup)
 5. [Recommended models](#5-recommended-models)
 6. [Model management and benchmarking](#6-model-management-and-benchmarking)
+   - [6.4 Quality battery](#64-quality-battery-)
 7. [Vision and tool-calling](#7-vision-and-tool-calling)
 8. [Troubleshooting](#8-troubleshooting)
 
@@ -288,6 +289,46 @@ sudo swapoff -a && sudo swapon -a
 
 Run this after stopping any 14B-class model before starting another benchmark — swap
 doesn't self-recover just from killing the process.
+
+### 6.4 Quality battery ✅
+
+Speed alone doesn't tell you if a faster engine is quietly worse. `quality-test.sh` ports
+`../llama-cpp-arc/quality-test.sh`'s 5-prompt battery to OVMS's `/v3/` API:
+
+```bash
+./quality-test.sh --model OpenVINO/Qwen3-8B-int4-ov --save qwen3-8b-ovms
+```
+
+Unlike llama-server, **OVMS does not ignore a mismatched `model` field** — `--model` must
+match exactly what `/v3/models` reports, so it's a required flag (llama.cpp's version
+hardcodes a placeholder string that llama-server ignores; that shortcut doesn't work here).
+`chat_template_kwargs: {"enable_thinking": false}` was confirmed to work identically on
+OVMS (same Jinja chat-template mechanism as llama.cpp) before relying on it for Qwen3.
+
+Diffed each of the 6 non-multimodal models against the **existing** SYCL baseline in
+`../llama-cpp-arc/quality-baselines/<model>/` — no need to regenerate those.
+
+| Model | Verdict | Notable finding |
+|---|---|---|
+| Qwen3-8B | SYCL better (2/5) | OVMS: `fib(0)=1` math bug (contradicts its own stated "0-based indexing"); OVMS: "fixed" divide-by-zero example left a bare `print()` that would still crash as written |
+| Qwen3-14B | Tied | Only prompt 4 differs (prime factors vs all divisors) — prompt ambiguity, not an error |
+| Phi-4-mini | Roughly tied, 1 each way | **SYCL got the train-catchup math wrong** (0.8h instead of the correct 4h) — OVMS got it right. OVMS's own divide-by-zero fix was flawed (returns the unfiltered list instead of `[]`) |
+| DeepSeek-R1-Distill-Qwen-7B | SYCL better (1/5) | Both loop unboundedly on prompt 5 (model-level issue, not engine-specific) — but on prompt 1, SYCL's loop resolves into a correct answer while OVMS never closes `</think>` and returns zero usable content, even at 3072 max_tokens |
+| Qwen2.5-Coder-7B-Instruct | Tied | No bugs on either side |
+| Qwen2.5-Coder-14B-Instruct | Tied | No bugs on either side; prompt 2 is character-for-character identical |
+
+**No systematic quality winner.** Errors are model+prompt-specific, not
+engine-systematic — each engine has its own real bugs on different models, and half the
+models tested show no quality difference at all. Consistent with int4 quantization-scheme
+differences (OpenVINO `INT4_ASYM` group-size 128 vs GGUF `Q4_K_M`) plus the
+already-documented temperature-0 non-determinism in parallel reduction order — small
+numerical divergences occasionally push one engine off a greedy-decoding path the other
+stays on, in either direction.
+
+**The one finding worth operational concern**: OVMS returning zero usable content on
+DeepSeek-R1-Distill-Qwen-7B's prompt 1 is a reliability gap, not a quality nuance — worth
+re-testing with a higher `--max-tokens` budget before trusting this model on OVMS for
+anything reasoning-heavy.
 
 ---
 

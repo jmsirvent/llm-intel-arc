@@ -53,7 +53,7 @@ Survey underpinning the `vllm-arc` evaluation tracked in `TODO.md`. The Arc 140V
 
 | Option | Status |
 |---|---|
-| OpenVINO Model Server (OVMS) | Spiked 2026-07-21/22, native install, self-contained under [`ovms-arc/`](ovms-arc/). Prefill beats SYCL unconditionally (+114% to +350% across all 6 non-multimodal catalog models tested); generation gain is architecture-dependent (+9-13% typical, Qwen3-8B +42% outlier, Phi-4-mini −5.7% regression). Whole Gemma-4 family blocked by an upstream OVMS bug, but `Qwen3-VL-8B-Instruct` delivers working vision + tool-calling together. Quality battery and long-context behavior still unvalidated. Full record: [`ovms-arc/local-llm-yoga-slim7-ubuntu2404-ovms.md`](ovms-arc/local-llm-yoga-slim7-ubuntu2404-ovms.md). |
+| OpenVINO Model Server (OVMS) | Spiked 2026-07-21/22, native install, self-contained under [`ovms-arc/`](ovms-arc/). Prefill beats SYCL unconditionally (+114% to +350% across all 6 non-multimodal catalog models tested); generation gain is architecture-dependent (+9-13% typical, Qwen3-8B +42% outlier, Phi-4-mini −5.7% regression). Whole Gemma-4 family blocked by an upstream OVMS bug, but `Qwen3-VL-8B-Instruct` delivers working vision + tool-calling together. Quality battery run against all 6 models (diffed vs the SYCL baselines): no systematic winner — each engine has its own model-specific bugs, half the models show no difference at all. Long-context behavior is the only thing still unvalidated. Full record: [`ovms-arc/local-llm-yoga-slim7-ubuntu2404-ovms.md`](ovms-arc/local-llm-yoga-slim7-ubuntu2404-ovms.md). |
 
 ### Candidates for validation (confirmable as of July 2026)
 

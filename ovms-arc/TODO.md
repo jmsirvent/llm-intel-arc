@@ -38,12 +38,17 @@ landscape"). `../llama-cpp-arc/` remains the production backend throughout.
       tool-calling combined (`--tool_parser hermes3`). Full record in
       `local-llm-yoga-slim7-ubuntu2404-ovms.md` §7.
 
-- [ ] **Run a quality battery on the strongest text candidates** (Qwen3-8B first — the
-      biggest generation-speed outlier, worth confirming the speed gain isn't hiding a
-      quality regression; then Qwen2.5-Coder-7B/14B as the "normal" case). Port
-      `../llama-cpp-arc/quality-test.sh`'s 5-prompt battery — needs adapting for OVMS's
-      `/v3/` API surface, not just pointing at a different port (see `../llama-cpp-arc/`
-      §8.5 for the pattern this is based on). **Blocking a production decision.**
+- [x] **Run a quality battery on all 6 non-multimodal candidates** — done 2026-07-22.
+      Ported `../llama-cpp-arc/quality-test.sh` to `quality-test.sh` (OVMS's `/v3/` API,
+      requires `--model` since OVMS doesn't ignore a mismatched model field). Diffed
+      against the existing SYCL baselines in `../llama-cpp-arc/quality-baselines/`.
+      **No systematic quality winner** — SYCL and OVMS each fail on different
+      model-specific prompts (Qwen3-8B: 2 real OVMS bugs; Phi-4-mini: 1 real SYCL math
+      error; DeepSeek-R1-Distill: OVMS returns zero content on 1 prompt where SYCL
+      completes). Qwen3-14B and both Qwen2.5-Coder sizes show no difference at all. Full
+      per-model table in `local-llm-yoga-slim7-ubuntu2404-ovms.md` §6.4 and the
+      `project-vllm-arc-evaluation` memory. Quality no longer blocks a production
+      decision — only long-context behavior does now.
 
 - [ ] **Check long-context / multi-turn behavior** — `llama-cpp-arc`'s real operational
       pain point (prefill degrading ~177→50 tok/s within a single 24.4K-token agentic
