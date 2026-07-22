@@ -22,6 +22,11 @@ build/
 # Cloned repos and build artifacts
 llama-cpp-arc/llama.cpp/
 
+# OVMS binary, downloaded release tarball, and pulled models
+ovms-arc/ovms/
+ovms-arc/*.tar.gz
+ovms-arc/*.tar.gz.sha256
+
 # Logs and temp
 *.log
 *.tmp

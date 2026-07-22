@@ -19,6 +19,7 @@ Local LLM inference on Intel Arc 140V (Xe2) — Lenovo Yoga Slim 7, Ubuntu 24.04
 |---|---|---|
 | [`ipex-llm/`](ipex-llm/) | IPEX-LLM — Ollama SYCL fork, Docker | Production, frozen (archived upstream) |
 | [`llama-cpp-arc/`](llama-cpp-arc/) | llama.cpp native SYCL (no Docker) | Production, development paused (waiting on upstream — see `llama-cpp-arc/TODO.md`) |
+| [`ovms-arc/`](ovms-arc/) | OpenVINO Model Server (no Docker) | Spike in progress — candidate 3 of the inference-engine evaluation, not production |
 
 ## Architecture decision
 
@@ -48,16 +49,21 @@ Survey underpinning the `vllm-arc` evaluation tracked in `TODO.md`. The Arc 140V
 | llama.cpp with the Vulkan backend (`GGML_VULKAN=ON`) | Spiked 2026-07-02: builds and runs correctly on Xe2, but Qwen3-8B-Q4_K_M benchmarked at -35% prefill / -55% generation vs the existing SYCL build. Not a viable replacement or complement. Full record in [`llama-cpp-arc/vulkan-spike-notes.md`](llama-cpp-arc/vulkan-spike-notes.md). |
 | Native Ollama (v0.32.1, official release) | Spiked 2026-07-21: no SYCL backend in any stable release — `ollama/ollama#11160` (SYCL support) is still open/unmerged. The only GPU path is the Vulkan backend added in 0.12.x, and it's worse than llama.cpp's own Vulkan spike on the same model (Qwen3-8B-Q4_K_M: 132.65 prefill / 8.30 gen tok/s vs llama.cpp Vulkan's 215.92 / 7.35, both far below the SYCL baseline's 323 / 15.25). Also found: Ollama drops integrated GPUs by default, needs `OLLAMA_IGPU_ENABLE=1` to even attempt Vulkan on the Arc 140V. Not a viable candidate today — revisit once the SYCL PR merges into a stable release. |
 
+### In progress — strong result, not yet a production decision
+
+| Option | Status |
+|---|---|
+| OpenVINO Model Server (OVMS) | Spiked 2026-07-21/22, native install, self-contained under [`ovms-arc/`](ovms-arc/). Prefill beats SYCL unconditionally (+114% to +350% across all 6 non-multimodal catalog models tested); generation gain is architecture-dependent (+9-13% typical, Qwen3-8B +42% outlier, Phi-4-mini −5.7% regression). Whole Gemma-4 family blocked by an upstream OVMS bug, but `Qwen3-VL-8B-Instruct` delivers working vision + tool-calling together. Quality battery and long-context behavior still unvalidated. Full record: [`ovms-arc/ovms-spike-notes.md`](ovms-arc/ovms-spike-notes.md). |
+
 ### Candidates for validation (confirmable as of July 2026)
 
 Ready for a hands-on validation spike on this hardware, with no known documentation blocker:
 
 | Option | Rationale | Reference |
 |---|---|---|
-| OpenVINO Model Server (OVMS) | First-party Intel Xe2 support, documented; exposes a native OpenAI-compatible API (`/v3/chat/completions`, `/models`) | [openvinotoolkit/model_server](https://github.com/openvinotoolkit/model_server) · [docs](https://docs.openvino.ai/2025/model-server/ovms_what_is_openvino_model_server.html) |
 | `optimum-intel` with IPEX | Actively maintained by Hugging Face, with documented GPU inference support; lacks a built-in OpenAI-compatible server, requiring a custom wrapper | [huggingface/optimum-intel](https://github.com/huggingface/optimum-intel) · [docs](https://docs.openvino.ai/2025/openvino-workflow-generative/inference-with-optimum-intel.html) |
 
-**Next step:** validate OpenVINO Model Server — the only remaining active-spike candidate (highest validation cost, but the strongest documented Xe2 support of all candidates found).
+**Next step:** run a quality-battery comparison and check long-context/multi-turn behavior on the strongest OVMS candidates before considering any production change — see `ovms-arc/TODO.md`.
 
 ### Monitored (unconfirmed timeline)
 

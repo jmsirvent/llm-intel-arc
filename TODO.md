@@ -18,9 +18,17 @@ For stack-specific items see the `TODO.md` inside each subdirectory.
             by default (`OLLAMA_IGPU_ENABLE=1` required). Full record in `README.md`
             §"Inference engine landscape" and the `project-vllm-arc-evaluation` memory.
             Revisit once the SYCL PR merges into a stable release.
-      - [ ] OpenVINO Model Server (OVMS) — not started. **Next step** — only remaining
-            active-spike candidate; strongest documented Xe2 support of all candidates
-            found.
+      - [ ] OpenVINO Model Server (OVMS) — **in progress (2026-07-21/22).** Prefill beats
+            SYCL unconditionally (+114% to +350%, all 6 non-multimodal catalog models);
+            generation gain is architecture-dependent (+9-13% typical, Qwen3-8B +42%
+            outlier, Phi-4-mini −5.7% regression). Whole Gemma-4 family blocked by an
+            upstream bug ([model_server#4178](https://github.com/openvinotoolkit/model_server/issues/4178)),
+            but `Qwen3-VL-8B-Instruct` delivers working vision + tool-calling together.
+            **Next:** quality battery + long-context check — not enough data yet for a
+            production decision. `llama-cpp-arc/` stays paused meanwhile (still the
+            production backend). Project docs: [`ovms-arc/README.md`](ovms-arc/README.md) ·
+            [`ovms-arc/ovms-spike-notes.md`](ovms-arc/ovms-spike-notes.md) ·
+            [`ovms-arc/TODO.md`](ovms-arc/TODO.md).
       - Parked/monitored, no action: `vllm-openvino` (low activity, no tagged releases),
         `llm-scaler` (Intel excludes client/iGPU hardware for now; watch — open PRs as of
         2026-07-21 add Lunar Lake iGPU compatibility work, no stable release yet).
